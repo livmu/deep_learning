@@ -157,7 +157,7 @@ class MLPClassifierDeepResidual(nn.Module):
             nn.Linear(64, 16)]
         )
         self.fc3 = nn.Linear(16, num_classes)
-        self.relu = ReLU()
+        self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
