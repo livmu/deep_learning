@@ -52,6 +52,7 @@ class LinearClassifier(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
+        x = x.view(x.size(0), -1)
         x = self.fc1(x)
         return x
 
@@ -123,6 +124,7 @@ class MLPClassifierDeep(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
+        x = x.view(x.size(0), -1)
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
         x = self.relu(self.fc3(x))
@@ -164,6 +166,7 @@ class MLPClassifierDeepResidual(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
+        x = x.view(x.size(0), -1)
         out = self.relu(self.fc1(x))
         for layer in self.fc2:
             residual = out
