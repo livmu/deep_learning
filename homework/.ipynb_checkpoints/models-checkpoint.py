@@ -99,7 +99,7 @@ class MLPClassifierDeep(nn.Module):
         num_classes: int = 6,
         h1: int = 128,
         h2: int = 64,
-        h3: int = 16
+        h3: int = 32
     ):
         """
         An MLP with multiple hidden layers
