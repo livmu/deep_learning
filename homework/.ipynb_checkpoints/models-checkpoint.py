@@ -139,8 +139,8 @@ class MLPClassifierDeepResidual(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
-        hidden_layer: int = 64,
-        layers: int = 3
+        hidden_dim: int = 64,
+        num_layers: int = 3
     ):
         """
         Args:
@@ -153,11 +153,11 @@ class MLPClassifierDeepResidual(nn.Module):
             num_layers: int, number of hidden layers
         """
         super().__init__()
-        self.fc1 = nn.Linear(3*h*w, hidden_layer)
+        self.fc1 = nn.Linear(3*h*w, hidden_dim)
         self.fc2 = nn.ModuleList(
-            [nn.Linear(hidden_layer, hidden_layer) for _ in range(3)]
+            [nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers)]
         )
-        self.fc3 = nn.Linear(hidden_layer, num_classes)
+        self.fc3 = nn.Linear(hidden_dim, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
