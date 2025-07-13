@@ -97,6 +97,9 @@ class MLPClassifierDeep(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        h1: int = 128,
+        h2: int = 64,
+        h3: int = 16
     ):
         """
         An MLP with multiple hidden layers
@@ -111,10 +114,10 @@ class MLPClassifierDeep(nn.Module):
             num_layers: int, number of hidden layers
         """
         super().__init__()
-        self.fc1 = nn.Linear(3*h*w, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 16)
-        self.fc4 = nn.Linear(16, num_classes)
+        self.fc1 = nn.Linear(3*h*w, h1)
+        self.fc2 = nn.Linear(h1, h2)
+        self.fc3 = nn.Linear(h2, h3)
+        self.fc4 = nn.Linear(h3, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
