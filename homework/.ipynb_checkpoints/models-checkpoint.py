@@ -73,8 +73,8 @@ class MLPClassifier(nn.Module):
             num_classes: int, number of classes
         """
         super().__init__()
-        self.fc1 = nn.Linear(3*h*w, 512)
-        self.fc2 = nn.Linear(512, num_classes)
+        self.fc1 = nn.Linear(3*h*w, 128)
+        self.fc2 = nn.Linear(128, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
