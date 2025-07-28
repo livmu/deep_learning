@@ -13,12 +13,6 @@ class Classifier(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 6,
-        layer1: int = 32,
-        layer2: int = 64,
-        layer3: int = 128,
-        s1: int = 2,
-        s2: int = 1,
-        s3: int = 1
     ):
         """
         A convolutional network for image classification.
@@ -33,19 +27,18 @@ class Classifier(nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1)
-        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1)
-        self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1)
-
-        self.batch1 = nn.BatchNorm2d(layer1)
-        self.batch2 = nn.BatchNorm2d(layer2)
-        self.batch3 = nn.BatchNorm2d(layer3)
+        # Example: a simple CNN architecture
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
         
-        self.fc1 = nn.Linear(layer3 * 8 * 8, 256)
+        # Input is 64x64, after 3 max pools (2x2, stride=2): 64/8 = 8
+        # So final conv output is 128 channels * 8 * 8 = 8192
+        self.fc1 = nn.Linear(128 * 8 * 8, 256)
         self.fc2 = nn.Linear(256, num_classes)
         
         self.relu = nn.ReLU()
-        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -59,23 +52,19 @@ class Classifier(nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        #z = self.batch1(self.conv1(z))
-        z = self.conv1(z)
-        z = self.max_pool(self.relu(z))
+        # Forward pass through conv layers
+        z = self.pool(self.relu(self.conv1(z)))  # 64x64 -> 32x32
+        z = self.pool(self.relu(self.conv2(z)))  # 32x32 -> 16x16  
+        z = self.pool(self.relu(self.conv3(z)))  # 16x16 -> 8x8
         
-        #z = self.batch2(self.conv2(z))
-        z = self.conv2(z)
-        z = self.max_pool(self.relu(z))
+        # Flatten for fully connected layers
+        z = z.view(z.size(0), -1)  # (batch, 128*8*8)
         
-        #z = self.batch3(self.conv3(z))
-        z = self.conv3(z)
-        z = self.max_pool(self.relu(z))
-
-        z = z.view(z.size(0), -1)
+        # Fully connected layers
         z = self.relu(self.fc1(z))
-        
-        logits = self.dropout(self.fc2(z))
+        z = self.dropout(z)
+        logits = self.fc2(z)
+
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
@@ -93,14 +82,88 @@ class Classifier(nn.Module):
         return self(x).argmax(dim=1)
 
 
+class DownBlock(nn.Module):
+    """Downsampling block with conv + batchnorm + relu + stride + residual connection"""
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        
+        # Shortcut connection for residual
+        if in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+        else:
+            self.shortcut = nn.Sequential(
+                nn.MaxPool2d(kernel_size=2, stride=2)
+            )
+        
+    def forward(self, x):
+        residual = self.shortcut(x)
+        
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        
+        out += residual  # Add residual connection
+        out = self.relu(out)
+        
+        return out
+
+
+class UpBlock(nn.Module):
+    """Upsampling block with transpose conv + batchnorm + relu + skip connections + residual"""
+    def __init__(self, in_channels, out_channels, skip_channels=0):
+        super().__init__()
+        self.upconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1)
+        # If skip connections, we need to handle concatenated features
+        conv_in_channels = out_channels + skip_channels
+        
+        # Two conv blocks for residual connection
+        self.conv1 = nn.Conv2d(conv_in_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        
+        # Skip connection for residual - may need projection if channels differ
+        if conv_in_channels != out_channels:
+            self.residual_proj = nn.Sequential(
+                nn.Conv2d(conv_in_channels, out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+        else:
+            self.residual_proj = nn.Identity()
+        
+    def forward(self, x, skip=None):
+        x = self.upconv(x)
+        if skip is not None:
+            # Use interpolation to match exact dimensions
+            x = torch.nn.functional.interpolate(x, size=skip.shape[2:], mode='bilinear', align_corners=False)
+            x = torch.cat([x, skip], dim=1)
+            
+        # Store input for residual connection
+        residual = self.residual_proj(x)
+        
+        # Two conv blocks with residual connection
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        
+        # Add residual connection
+        out = self.relu(out + residual)
+        
+        return out
+
+
 class Detector(torch.nn.Module):
     def __init__(
         self,
         in_channels: int = 3,
         num_classes: int = 3,
-        layer1: int = 16,
-        layer2: int = 32,
-        layer3: int = 64
     ):
         """
         A single model that performs segmentation and depth regression
@@ -114,42 +177,39 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        self.net1 = nn.Sequential(
-            torch.nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1, dilation=1),
-            nn.BatchNorm2d(layer1),
-            nn.ReLU(),
+        # Encoder (downsampling path) - simpler but effective
+        self.down1 = DownBlock(in_channels, 32)      # (B, 3, H, W) -> (B, 32, H/2, W/2)
+        self.down2 = DownBlock(32, 64)               # (B, 32, H/2, W/2) -> (B, 64, H/4, W/4)
+        
+        # Simplified bottleneck to reduce computation
+        self.bottleneck = nn.Sequential(
+            nn.Conv2d(64, 96, kernel_size=3, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(96, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
         )
-        self.net2 = nn.Sequential(
-            torch.nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1, dilation=1),
-            nn.BatchNorm2d(layer2),
-            nn.ReLU(),
+        
+        # Decoder (upsampling path) with skip connections
+        self.up1 = UpBlock(64, 32, skip_channels=64)     # (B, 64, H/4, W/4) + skip -> (B, 32, H/2, W/2)
+        self.up2 = UpBlock(32, 32, skip_channels=32)     # (B, 32, H/2, W/2) + skip -> (B, 32, H, W)
+        
+        # Task-specific heads with final upsampling to ensure correct output size
+        self.seg_head = nn.Sequential(
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(16, num_classes, kernel_size=1)  # (B, 32, H, W) -> (B, 3, H, W)
         )
-
-        self.net3 = nn.Sequential(
-            nn.Conv2d(layer2, layer3, kernel_size=3, padding=1),
-            nn.BatchNorm2d(layer3),
-            nn.ReLU(),
+        self.depth_head = nn.Sequential(
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(16, 1, kernel_size=1),         # (B, 32, H, W) -> (B, 1, H, W)
+            nn.Sigmoid()                             # Constrain depth to [0, 1]
         )
-
-        # Decoder
-        self.up1 = nn.Sequential(
-            nn.ConvTranspose2d(layer3, layer2, kernel_size=2, stride=2),
-            nn.ReLU(),
-        )
-
-        self.up2 = nn.Sequential(
-            nn.ConvTranspose2d(layer3, layer1, kernel_size=2, stride=2),
-            nn.ReLU(),
-        )
-
-        self.up3 = nn.Sequential(
-            nn.ConvTranspose2d(layer2, layer1, kernel_size=2, stride=2),
-            nn.ReLU(),
-        )
-
-        self.seg_head = nn.Conv2d(layer3, num_classes, kernel_size=1)
-        self.depth_head = nn.Conv2d(layer3, 1, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -167,21 +227,28 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        b  = self.net3(self.net2(self.net(z)))
+        # Encoder (downsampling) - save features for skip connections
+        down1_out = self.down1(z)          # (B, 3, H, W) -> (B, 32, H/2, W/2)
+        down2_out = self.down2(down1_out)  # (B, 32, H/2, W/2) -> (B, 64, H/4, W/4)
+        
+        # Bottleneck
+        bottleneck_out = self.bottleneck(down2_out)  # (B, 64, H/4, W/4) -> (B, 64, H/4, W/4)
+        
+        # Decoder (upsampling) with skip connections
+        up1_out = self.up1(bottleneck_out, down2_out)  # (B, 64, H/4, W/4) + skip -> (B, 32, H/2, W/2)
+        up2_out = self.up2(up1_out, down1_out)         # (B, 32, H/2, W/2) + skip -> (B, 32, H, W)
+        
+        # Task-specific heads
+        logits = self.seg_head(up2_out)   # (B, 32, H/?, W/?) -> (B, 3, H/?, W/?)
+        depth_raw = self.depth_head(up2_out)  # (B, 32, H/?, W/?) -> (B, 1, H/?, W/?)
+        
+        # Ensure output matches input size exactly
+        target_size = (x.shape[2], x.shape[3])  # (H, W) from original input
+        logits = torch.nn.functional.interpolate(logits, size=target_size, mode='bilinear', align_corners=False)
+        depth_raw = torch.nn.functional.interpolate(depth_raw, size=target_size, mode='bilinear', align_corners=False)
+        depth = depth_raw.squeeze(1)      # (B, 1, H, W) -> (B, H, W)
 
-        u1 = self.up1(b)
-        u1 = torch.cat([u1, d2], dim=1)
-
-        u2 = self.up2(u1)
-        u2 = torch.cat([u2, d1], dim=1)
-
-        u3 = self.up3(u2)
-
-        logits = self.seg_head(u3)
-        raw_depth = self.depth_head(u3).squeeze(1)
-
-        return logits, raw_depth
+        return logits, depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
