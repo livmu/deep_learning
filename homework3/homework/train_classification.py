@@ -104,8 +104,8 @@ def train(
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-                f"train_acc={epoch_train_acc:.4f} "
-                f"val_acc={epoch_val_acc:.4f}"
+                f"train_acc={train_acc:.4f} "
+                f"val_acc={val_acc:.4f}"
             )
 
     # save and overwrite the model in the root directory for grading
