@@ -46,7 +46,7 @@ def train(
     
     # change
     train_data = load_data("classification_data/train", transform_pipline='aug', shuffle=True, batch_size=batch_size, num_workers=2)
-    val_data = load_data("classification_data/val", transform_pipline='aug', shuffle=False)
+    val_data = load_data("classification_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
