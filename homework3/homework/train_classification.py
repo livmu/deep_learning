@@ -70,12 +70,13 @@ def train(
             # TODO: implement training step
             optimizer.zero_grad()
             logits = model(img)
-            loss = loss_func(logits, label)
+            loss = F.cross_entropy(logits, label)
             loss.backward()
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            accuracy = (preds == label).float().mean()
+            accuracy = (preds == label).float().mean
+            loss_func.add(preds, label)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
             metrics["train_acc"].append(accuracy.item())
@@ -99,7 +100,9 @@ def train(
         epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
         epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
 
-        logger.add_scalar("train_acc", epoch_train_acc, global_step)
+        train_acc = loss_func.compute()['accuracy']
+
+        logger.add_scalar("train_acc", train_acc, global_step)
         logger.add_scalar("val_acc", epoch_val_acc, global_step)
 
         # print on first, last, every 10th epoch
