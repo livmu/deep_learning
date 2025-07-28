@@ -13,10 +13,10 @@ class Classifier(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 6,
-        layer1: int = 32,
-        layer2: int = 64,
-        layer3: int = 128,
-        s1: int = 2,
+        layer1: int = 16,
+        layer2: int = 32,
+        layer3: int = 64,
+        s1: int = 5,
         s2: int = 1,
         s3: int = 1
     ):
