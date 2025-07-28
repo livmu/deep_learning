@@ -16,6 +16,7 @@ class Classifier(nn.Module):
         layer1: int = 16,
         layer2: int = 32,
         layer3: int = 64,
+        layer4: int = 128,
         s1: int = 2,
         s2: int = 1,
         s3: int = 1
@@ -33,22 +34,20 @@ class Classifier(nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-
         self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1)
-        self.batch1 = nn.BatchNorm2d(layer1)
-            
         self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1)
-        self.batch2 = nn.BatchNorm2d(layer2)
-
         self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1)
-        self.batch3 = nn.BatchNorm2d(layer3)
 
-        self.conv4 = nn.Conv2d(layer3, num_classes, kernel_size=3, stride=s3, padding=1)
+        self.batch1 = nn.BatchNorm2d(layer1)
+        self.batch2 = nn.BatchNorm2d(layer2)
+        self.batch3 = nn.BatchNorm2d(layer3)
+        
+        self.fc1 = nn.Linear(layer3 * 8 * 8, layer4)
+        self.fc2 = nn.Linear(layer4, num_classes)
         
         self.relu = nn.ReLU()
-        self.max_pool = nn.MaxPool2d(kernel_size=2)
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.dropout = nn.Dropout(0.3)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -71,9 +70,11 @@ class Classifier(nn.Module):
         z = self.batch3(self.conv3(z))
         z = self.max_pool(self.relu(z))
 
-        z = self.dropout(self.avg_pool(z))
-        
-        logits = self.conv4(z).squeeze(-1).squeeze(-1)
+        z = z.view(z.size(0), -1)
+        z = self.relu(self.fc1(z))
+        z = self.dropout(self.avg_pool(z
+                                      
+        logits = self.fc2(z)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
