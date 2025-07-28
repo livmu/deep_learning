@@ -73,9 +73,8 @@ class Classifier(nn.Module):
 
         z = z.view(z.size(0), -1)
         z = self.relu(self.fc1(z))
-        z = self.dropout(self.avg_pool(z))
-                                      
-        logits = self.fc2(z)
+        
+        logits = self.dropout(self.fc2(z))
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
