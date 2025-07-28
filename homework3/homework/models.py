@@ -34,17 +34,17 @@ class Classifier(nn.Module):
 
         # TODO: implement
         self.features = nn.Sequential(
-            nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1, dilation=1),
+            nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
             nn.MaxPool2d(2),
             
-            nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1, dilation=1),
+            nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
             nn.MaxPool2d(2),
 
-            nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1, dilation=1),
+            nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1),
             nn.BatchNorm2d(layer3),
             nn.ReLU(),
             nn.AdaptiveAvgPool2d(1)
