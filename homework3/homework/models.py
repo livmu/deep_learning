@@ -43,7 +43,7 @@ class Classifier(nn.Module):
         self.batch3 = nn.BatchNorm2d(layer3)
         
         #self.fc1 = nn.Linear(layer3 * 8 * 8, 256)
-        self.fc2 = nn.Linear(layer3, num_classes)
+        self.fc1 = nn.Linear(layer3, num_classes)
         
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
