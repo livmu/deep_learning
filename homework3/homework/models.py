@@ -36,14 +36,14 @@ class Classifier(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1)
         self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1)
         self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1)
-        #self.conv4 = nn.Conv2d(layer3, num_classes, kernel_size=3, stride=s3, padding=1)
+        self.conv4 = nn.Conv2d(layer3, num_classes, kernel_size=3, stride=s3, padding=1)
 
         self.batch1 = nn.BatchNorm2d(layer1)
         self.batch2 = nn.BatchNorm2d(layer2)
         self.batch3 = nn.BatchNorm2d(layer3)
         
         #self.fc1 = nn.Linear(layer3 * 8 * 8, 256)
-        self.fc1 = nn.Linear(layer3, num_classes)
+        #self.fc1 = nn.Linear(layer3, num_classes)
         
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -72,7 +72,7 @@ class Classifier(nn.Module):
         z = self.max_pool(self.relu(z))
 
         z = self.dropout(self.avg_pool(z))
-        logits = self.fc1(z).squeeze(-1).squeeze(-1)
+        logits = self.conv4(z).squeeze(-1).squeeze(-1)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
