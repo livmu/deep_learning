@@ -34,14 +34,17 @@ class Classifier(nn.Module):
             nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1, dilation=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
+            nn.MaxPool2d(2),
             
             nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1, dilation=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
+            nn.MaxPool2d(2),
 
             nn.Conv2d(layer2, layer3, kernel_size=3, stride=1, padding=1, dilation=1),
             nn.BatchNorm2d(layer3),
             nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1)
         )
         
         self.classifier = nn.Linear(layer3, num_classes)
