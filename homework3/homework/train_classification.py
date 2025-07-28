@@ -8,7 +8,7 @@ import torch.utils.tensorboard as tb
 
 from .metrics import AccuracyMetric#, DetectionMetric, ConfusionMatrix
 from .models import Classifier, load_model, save_model
-from datasets.classification_data import load_data
+from datasets.classification_dataset import load_data
 #from datasets.road_dataset import load_data
 #from datasets.road_transforms import load_data
 #from datasets.road_utils import load_data
