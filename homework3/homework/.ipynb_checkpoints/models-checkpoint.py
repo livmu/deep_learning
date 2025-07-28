@@ -33,21 +33,24 @@ class Classifier(nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-
-        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1)
-        self.batch1 = nn.BatchNorm2d(layer1)
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1, dilation=1),
+            nn.BatchNorm2d(layer1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
             
-        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1)
-        self.batch2 = nn.BatchNorm2d(layer2)
+            nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1, dilation=1),
+            nn.BatchNorm2d(layer2),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
 
-        self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1)
-        self.batch3 = nn.BatchNorm2d(layer3)
-
-        self.conv4 = nn.Conv2d(layer3, num_classes, kernel_size=3, stride=s3, padding=1)
+            nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1, dilation=1),
+            nn.BatchNorm2d(layer3),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1)
+        )
         
-        self.relu = nn.ReLU()
-        self.max_pool = nn.MaxPool2d(kernel_size=2)
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.classifier = nn.Linear(layer3, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -61,16 +64,7 @@ class Classifier(nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        z = self.batch1(self.conv1(z))
-        z = self.max_pool(self.relu(z))
-        
-        z = self.batch2(self.conv2(z))
-        z = self.max_pool(self.relu(z))
-        
-        z = self.batch3(self.conv3(z))
-        z = self.max_pool(self.relu(z))
-
-        logits = self.classifier(self.avg_pool(z).flatten(1))
+        logits = self.classifier(self.features(z).flatten(1))
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
