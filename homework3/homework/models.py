@@ -71,7 +71,7 @@ class Classifier(nn.Module):
         z = self.batch3(self.conv3(z))
         z = self.max_pool(self.relu(z))
 
-        z = self.dropout(self.avg_pool(z)))
+        z = self.dropout(self.avg_pool(z))
         
         logits = self.conv4(z.squeeze(-1).squeeze(-1)
         return logits
