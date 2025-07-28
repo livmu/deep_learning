@@ -73,7 +73,7 @@ class Classifier(nn.Module):
 
         z = self.dropout(self.avg_pool(z))
         
-        logits = self.conv4(z.squeeze(-1).squeeze(-1)
+        logits = self.conv4(z).squeeze(-1).squeeze(-1)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
