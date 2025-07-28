@@ -45,7 +45,7 @@ def train(
     model.train()
     
     # change
-    train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size, num_workers=4)
+    train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size, num_workers=2)
     val_data = load_data("classification_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
 
