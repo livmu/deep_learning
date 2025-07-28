@@ -48,6 +48,7 @@ class Classifier(nn.Module):
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=2)
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.dropout = nn.Droupout(0.3)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -70,7 +71,9 @@ class Classifier(nn.Module):
         z = self.batch3(self.conv3(z))
         z = self.max_pool(self.relu(z))
 
-        logits = self.conv4(self.avg_pool(z)).squeeze(-1).squeeze(-1)
+        z = self.dropout(self.avg_pool(z)))
+        
+        logits = self.conv4(z.squeeze(-1).squeeze(-1)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
