@@ -50,7 +50,8 @@ def train(
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
-    loss_func = AccuracyMetric()
+    train_metric = AccuracyMetric()
+    val_metric = AccuracyMetric()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
@@ -75,12 +76,9 @@ def train(
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            accuracy = (preds == label).float().mean
-            loss_func.add(preds, label)
+            train_metric.add(preds, label)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
-            metrics["train_acc"].append(accuracy.item())
-
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
@@ -93,17 +91,14 @@ def train(
                 # TODO: compute validation accuracy
                 logits = model(img)
                 preds = torch.argmax(logits, dim=1)
-                accuracy = (preds == label).float().mean()
-                metrics["val_acc"].append(accuracy.item())
+                val_metric.add(preds, label)
 
         # log average train and val accuracy to tensorboard
-        epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
-        epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
-
-        train_acc = loss_func.compute()['accuracy']
+        train_acc = train_metric.compute()['accuracy']
+        val_acc = val_metric.compute()['accuracy']
 
         logger.add_scalar("train_acc", train_acc, global_step)
-        logger.add_scalar("val_acc", epoch_val_acc, global_step)
+        logger.add_scalar("val_acc", val_acc, global_step)
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
