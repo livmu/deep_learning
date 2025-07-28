@@ -60,13 +60,16 @@ class Classifier(nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        z = self.batch1(self.conv1(z))
+        #z = self.batch1(self.conv1(z))
+        z = self.conv1(z)
         z = self.max_pool(self.relu(z))
         
-        z = self.batch2(self.conv2(z))
+        #z = self.batch2(self.conv2(z))
+        z = self.conv2(z)
         z = self.max_pool(self.relu(z))
         
-        z = self.batch3(self.conv3(z))
+        #z = self.batch3(self.conv3(z))
+        z = self.conv3(z)
         z = self.max_pool(self.relu(z))
 
         z = z.view(z.size(0), -1)
