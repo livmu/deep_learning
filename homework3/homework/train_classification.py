@@ -4,26 +4,15 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.utils.tensorboard as tb
 
+from .metrics import AccuracyMetric#, DetectionMetric, ConfusionMatrix
 from .models import Classifier, load_model, save_model
 from homework.datasets.classification_dataset import load_data
+#from datasets.road_dataset import load_data
+#from datasets.road_transforms import load_data
+#from datasets.road_utils import load_data
 
-class ClassificationLoss(nn.Module):
-    def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
-        """
-        Multi-class classification loss
-        Hint: simple one-liner
-
-        Args:
-            logits: tensor (b, c) logits, where c is the number of classes
-            target: tensor (b,) labels
-
-        Returns:
-            tensor, scalar loss
-        """
-        return nn.functional.cross_entropy(logits, target)
 
 def train(
     exp_dir: str = "logs",
@@ -54,12 +43,15 @@ def train(
     model = load_model(model_name, **kwargs)
     model = model.to(device)
     model.train()
-
+    
+    # change
     train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size, num_workers=4)
     val_data = load_data("classification_data/val", shuffle=False)
+    #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
-    loss_func = ClassificationLoss()
+    train_metric = AccuracyMetric()
+    val_metric = AccuracyMetric()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
@@ -79,16 +71,14 @@ def train(
             # TODO: implement training step
             optimizer.zero_grad()
             logits = model(img)
-            loss = loss_func(logits, label)
+            loss = torch.nn.functional.cross_entropy(logits, label)
             loss.backward()
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            accuracy = (preds == label).float().mean()
+            train_metric.add(preds, label)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
-            metrics["train_acc"].append(accuracy.item())
-
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
@@ -101,22 +91,21 @@ def train(
                 # TODO: compute validation accuracy
                 logits = model(img)
                 preds = torch.argmax(logits, dim=1)
-                accuracy = (preds == label).float().mean()
-                metrics["val_acc"].append(accuracy.item())
+                val_metric.add(preds, label)
 
         # log average train and val accuracy to tensorboard
-        epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
-        epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
+        train_acc = train_metric.compute()['accuracy']
+        val_acc = val_metric.compute()['accuracy']
 
-        logger.add_scalar("train_acc", epoch_train_acc, global_step)
-        logger.add_scalar("val_acc", epoch_val_acc, global_step)
+        logger.add_scalar("train_acc", train_acc, global_step)
+        logger.add_scalar("val_acc", val_acc, global_step)
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-                f"train_acc={epoch_train_acc:.4f} "
-                f"val_acc={epoch_val_acc:.4f}"
+                f"train_acc={train_acc:.4f} "
+                f"val_acc={val_acc:.4f}"
             )
 
     # save and overwrite the model in the root directory for grading
