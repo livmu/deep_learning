@@ -15,10 +15,7 @@ class Classifier(nn.Module):
         num_classes: int = 6,
         layer1: int = 16,
         layer2: int = 32,
-        layer3: int = 64,
-        s1: int = 5,
-        s2: int = 1,
-        s3: int = 1
+        layer3: int = 64
     ):
         """
         A convolutional network for image classification.
@@ -33,9 +30,9 @@ class Classifier(nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1)
-        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1)
-        self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=3, stride=5, padding=1)
+        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(layer2, layer3, kernel_size=3, stride=1, padding=1)
 
         self.batch1 = nn.BatchNorm2d(layer1)
         self.batch2 = nn.BatchNorm2d(layer2)
