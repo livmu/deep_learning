@@ -13,9 +13,12 @@ class Classifier(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 6,
-        layer1: int = 32,
-        layer2: int = 64,
-        layer3: int = 128
+        layer1: int = 16,
+        layer2: int = 32,
+        layer3: int = 64,
+        s1: int = 1,
+        s2: int = 1,
+        s3: int = 2
     ):
         """
         A convolutional network for image classification.
@@ -31,17 +34,17 @@ class Classifier(nn.Module):
 
         # TODO: implement
         self.features = nn.Sequential(
-            nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1, dilation=1),
+            nn.Conv2d(in_channels, layer1, kernel_size=3, stride=s1, padding=1, dilation=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
             nn.MaxPool2d(2),
             
-            nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1, dilation=1),
+            nn.Conv2d(layer1, layer2, kernel_size=3, stride=s2, padding=1, dilation=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
             nn.MaxPool2d(2),
 
-            nn.Conv2d(layer2, layer3, kernel_size=3, stride=1, padding=1, dilation=1),
+            nn.Conv2d(layer2, layer3, kernel_size=3, stride=s3, padding=1, dilation=1),
             nn.BatchNorm2d(layer3),
             nn.ReLU(),
             nn.AdaptiveAvgPool2d(1)
