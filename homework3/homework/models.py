@@ -13,10 +13,9 @@ class Classifier(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 6,
-        layer1: int = 16,
-        layer2: int = 32,
-        layer3: int = 64,
-        layer4: int = 128,
+        layer1: int = 32,
+        layer2: int = 64,
+        layer3: int = 128,
         s1: int = 2,
         s2: int = 1,
         s3: int = 1
@@ -42,12 +41,11 @@ class Classifier(nn.Module):
         self.batch2 = nn.BatchNorm2d(layer2)
         self.batch3 = nn.BatchNorm2d(layer3)
         
-        self.fc1 = nn.Linear(layer3 * 8 * 8, layer4)
-        self.fc2 = nn.Linear(layer4, num_classes)
+        self.fc1 = nn.Linear(layer3 * 8 * 8, 256)
+        self.fc2 = nn.Linear(256, num_classes)
         
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
