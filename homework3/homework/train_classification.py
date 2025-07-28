@@ -70,7 +70,7 @@ def train(
             # TODO: implement training step
             optimizer.zero_grad()
             logits = model(img)
-            loss = F.cross_entropy(logits, label)
+            loss = torch.nn.functional.cross_entropy(logits, label)
             loss.backward()
             optimizer.step()
 
