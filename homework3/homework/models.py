@@ -70,7 +70,7 @@ class Classifier(nn.Module):
         z = self.batch3(self.conv3(z))
         z = self.max_pool(self.relu(z))
 
-        logits = self.conv4(self.avg_pool(z).flatten(1))
+        logits = self.conv4(self.avg_pool(z)).squeeze(-1).squeeze(-1)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
