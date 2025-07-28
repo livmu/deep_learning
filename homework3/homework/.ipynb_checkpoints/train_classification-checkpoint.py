@@ -6,17 +6,27 @@ import numpy as np
 import torch
 import torch.utils.tensorboard as tb
 
-from .metrics import AccuracyMetric#, DetectionMetric, ConfusionMatrix
-from .models import Classifier, load_model, save_model
-from homework.datasets.classification_dataset import load_data
-#from datasets.road_dataset import load_data
-#from datasets.road_transforms import load_data
-#from datasets.road_utils import load_data
+from .models import ClassificationLoss, load_model, save_model
+from .utils import load_data
 
+class ClassificationLoss(nn.Module):
+    def forward(self, logits: torch.Tensor, target: torch.LongTensor) -> torch.Tensor:
+        """
+        Multi-class classification loss
+        Hint: simple one-liner
+
+        Args:
+            logits: tensor (b, c) logits, where c is the number of classes
+            target: tensor (b,) labels
+
+        Returns:
+            tensor, scalar loss
+        """
+        return nn.functional.cross_entropy(logits, target)
 
 def train(
     exp_dir: str = "logs",
-    model_name: str = "classifier",
+    model_name: str = "linear",
     num_epoch: int = 50,
     lr: float = 1e-3,
     batch_size: int = 128,
@@ -43,15 +53,12 @@ def train(
     model = load_model(model_name, **kwargs)
     model = model.to(device)
     model.train()
-    
-    # change
-    train_data = load_data("classification_data/train", transform_pipline='aug', shuffle=True, batch_size=batch_size, num_workers=2)
-    val_data = load_data("classification_data/val", transform_pipline='aug', shuffle=False)
-    #train_data, val_data = load_data(dataset_path='')
+
+    train_data = load_data("classification_data/train", transform_pipeline='aug', shuffle=True, batch_size=batch_size, num_workers=4)
+    val_data = load_data("classification_data/val", shuffle=False)
 
     # create loss function and optimizer
-    train_metric = AccuracyMetric()
-    val_metric = AccuracyMetric()
+    loss_func = ClassificationLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
@@ -71,14 +78,16 @@ def train(
             # TODO: implement training step
             optimizer.zero_grad()
             logits = model(img)
-            loss = torch.nn.functional.cross_entropy(logits, label)
+            loss = loss_func(logits, label)
             loss.backward()
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, label)
+            accuracy = (preds == label).float().mean()
 
             logger.add_scalar("train_loss", loss.item(), global_step)
+            metrics["train_acc"].append(accuracy.item())
+
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
@@ -91,21 +100,22 @@ def train(
                 # TODO: compute validation accuracy
                 logits = model(img)
                 preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, label)
+                accuracy = (preds == label).float().mean()
+                metrics["val_acc"].append(accuracy.item())
 
         # log average train and val accuracy to tensorboard
-        train_acc = train_metric.compute()['accuracy']
-        val_acc = val_metric.compute()['accuracy']
+        epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
+        epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
 
-        logger.add_scalar("train_acc", train_acc, global_step)
-        logger.add_scalar("val_acc", val_acc, global_step)
+        logger.add_scalar("train_acc", epoch_train_acc, global_step)
+        logger.add_scalar("val_acc", epoch_val_acc, global_step)
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-                f"train_acc={train_acc:.4f} "
-                f"val_acc={val_acc:.4f}"
+                f"train_acc={epoch_train_acc:.4f} "
+                f"val_acc={epoch_val_acc:.4f}"
             )
 
     # save and overwrite the model in the root directory for grading
