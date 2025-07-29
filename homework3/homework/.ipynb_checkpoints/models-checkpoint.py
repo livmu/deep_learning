@@ -139,8 +139,9 @@ class Detector(torch.nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=k, stride=s, padding=p)
-        self.pool = nn.AdaptiveAvgPool2d((1,1))
+        self.track_head = nn.Conv2d(layer2, num_classes, kernel_size=k, stride=s, padding=p)
+        self.depth_head = nn.Conv2d(layer2, 1, kernel_size=k, stride=s, padding=p)
+        #self.pool = nn.AdaptiveAvgPool2d((1,1))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -165,8 +166,8 @@ class Detector(torch.nn.Module):
         z = self.batch2(self.conv2(z))
         z = self.up(z)
 
-        logits = self.conv3(z)
-        raw_depth = self.pool(z).view(z.size(0), -1)
+        logits = self.track_head(z)
+        raw_depth = self.depth_head(z).squeeze(1)
 
         return logits, raw_depth
 
