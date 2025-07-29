@@ -12,15 +12,16 @@ from .metrics import DetectionMetric, ConfusionMatrix
 from .models import Detector, load_model, save_model
 from homework.datasets.road_dataset import load_data
 
-def soft_iou(preds, targets, num_classes=3, eps=1e-6):
-    preds = F.softmax(preds, dim=1)  # shape: (B, C, H, W) for segmentation, (B, C) for classification
-    targets_onehot = F.one_hot(targets, num_classes).permute(0, 2, 1).float()  # shape: (B, C, *)
-    
-    intersection = (preds * targets_onehot).sum(dim=0)
-    union = (preds + targets_onehot - preds * targets_onehot).sum(dim=0)
+def soft_iou(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    pred = pred.squeeze(1) if pred.dim() == 4 else pred
+    target = target.squeeze(1) if target.dim() == 4 else target
+
+    intersection = (pred * target).sum(dim=(1, 2))
+    union = pred.sum(dim=(1, 2)) + target.sum(dim=(1, 2)) - intersection
     iou = (intersection + eps) / (union + eps)
-    
+
     return 1 - iou.mean()
+
 
 
 def train(
