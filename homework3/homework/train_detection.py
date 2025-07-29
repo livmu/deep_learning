@@ -15,7 +15,7 @@ from homework.datasets.road_dataset import load_data
 def train(
     exp_dir: str = "logs",
     model_name: str = "detector",
-    num_epoch: int = 50,
+    num_epoch: int = 20,
     lr: float = 1e-3,
     batch_size: int = 128,
     seed: int = 2024,
@@ -165,7 +165,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--exp_dir", type=str, default="logs")
     parser.add_argument("--model_name", type=str, required=True)
-    parser.add_argument("--num_epoch", type=int, default=50)
+    parser.add_argument("--num_epoch", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=2024)
 
