@@ -71,8 +71,10 @@ def train(
         model.train()
         train_loss_vals = []
 
-        for img, seg, depth in train_data:
-            img, seg, depth = img.to(device), seg.to(device), depth.to(device)
+        for x in train_data:
+            img = x['image'].to(device)
+            seg = x['track'].to(device)
+            depth = x['depth'].to(device)
 
             # TODO: implement training step
             optimizer.zero_grad()
@@ -96,8 +98,10 @@ def train(
             model.eval()
             val_loss_vals = []
 
-            for img, seg, depth in val_data:
-                img, seg, depth = img.to(device), seg.to(device), depth.to(device)
+            for x in val_data:
+                img = x['image'].to(device)
+                seg = x['track'].to(device)
+                depth = x['depth'].to(device)
         
                 # TODO: compute validation accuracy
                 logits, raw_depth = model(img)
