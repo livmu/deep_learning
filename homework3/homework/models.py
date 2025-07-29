@@ -96,8 +96,8 @@ class Detector(torch.nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 3,
-        layer1: int = 8,
-        layer2: int = 16,
+        layer1: int = 16,
+        layer2: int = 32,
         s: int = 2
     ):
         """
@@ -111,34 +111,35 @@ class Detector(torch.nn.Module):
 
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
-
-        # TODO: implement
-        self.d1 = nn.Sequential(
-            torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=s, padding=1),
-            nn.BatchNorm2d(layer1),
-            nn.ReLU(),
-        )
         
-        self.d2 = nn.Sequential(
-            torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=s, padding=1),
+        # TODO: implement
+        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=4, stride=s, padding=2)
+        self.batch1 = nn.BatchNorm2d(layer1)
+        
+        self.down = nn.Sequential(
+            nn.Conv2d(layer1, layer1, kernel_size=4, stride=s, padding=2),
+            nn.BatchNorm2d(layer1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(layer1, layer1, kernel_size=4, stride=s, padding=2),
+            nn.BatchNorm2d(layer1),
+            nn.ReLU(inplace=True),
+        )
+
+        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=4, stride=s, padding=2)
+        self.batch2 = nn.BatchNorm2d(layer2)
+
+        self.up = nn.Sequential(
+            nn.ConvTranspose2d(layer2, layer2, kernel_size=4, stride=s, padding=2),
             nn.BatchNorm2d(layer2),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(layer2, layer2, kernel_size=4, stride=s, padding=2),
+            nn.BatchNorm2d(layer2),
+            nn.ReLU(inplace=True),
         )
 
-        self.u1 = nn.Sequential(
-            nn.ConvTranspose2d(layer2, layer1, kernel_size=4, stride=s, padding=1),
-            nn.BatchNorm2d(layer1),
-            nn.ReLU(),
-        )
-
-        self.u2 = nn.Sequential(
-            nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=s, padding=1),
-            nn.BatchNorm2d(layer1),
-            nn.ReLU(),
-        )
-
-        self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
-        self.depth_head = nn.Conv2d(layer1, 1, kernel_size=1)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.conv3 = nn.Conv2d(layer1, num_classes, kernel_size=1)
+        self.conv4 = nn.Conv2d(layer1, 1, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -157,11 +158,15 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        z = self.d2(self.d1(z))
-        z = self.u2(self.u1(z))
+        z = self.batch1(self.conv1(z))
+        z = self.down(z)
 
-        logits = self.track_head(z)
-        raw_depth = self.depth_head(z).squeeze(1)
+        z = self.batch2(self.conv2(z))
+        z = self.up(z)
+
+        z = self.pool(z)
+        logits = self.conv3(z)
+        raw_depth = self.conv4(z).squeeze(1)
 
         return logits, raw_depth
 
