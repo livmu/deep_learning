@@ -124,21 +124,15 @@ class Detector(torch.nn.Module):
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
-        
-        self.d3 = nn.Sequential(
-            torch.nn.Conv2d(layer2, layer3, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(layer3),
-            nn.ReLU(),
-        )
 
         self.u1 = nn.Sequential(
-            nn.Conv2d(layer3, layer2, kernel_size=3, padding=1),
+            nn.Conv2d(layer2, layer1, kernel_size=3, padding=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
 
         self.u2 = nn.Sequential(
-            nn.Conv2d(layer2, layer1, kernel_size=3, padding=1),
+            nn.Conv2d(layer1, layer1, kernel_size=3, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
@@ -163,7 +157,7 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        z = self.d3(self.d2(self.d1(z)))
+        z = self.d2(self.d1(z))
         z = self.u2(self.u1(z))
 
         logits = self.seg_head(z)
