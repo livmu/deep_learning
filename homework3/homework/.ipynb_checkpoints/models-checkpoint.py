@@ -16,8 +16,8 @@ class Classifier(nn.Module):
         layer1: int = 32,
         layer2: int = 64,
         layer3: int = 128,
-        s1: int = 2,
-        s2: int = 1,
+        s1: int = 8,
+        s2: int = 2,
         s3: int = 1
     ):
         """
