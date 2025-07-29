@@ -131,11 +131,11 @@ class Detector(torch.nn.Module):
             nn.ReLU(),
         )
 
-        #self.u2 = nn.Sequential(
-        #    nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=s, padding=1),
-        #    nn.BatchNorm2d(layer1),
-        #    nn.ReLU(),
-        #)
+        self.u2 = nn.Sequential(
+            nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=s, padding=1),
+            nn.BatchNorm2d(layer1),
+            nn.ReLU(),
+        )
 
         self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
         self.depth_head = nn.Conv2d(layer1, 1, kernel_size=1)
@@ -158,8 +158,7 @@ class Detector(torch.nn.Module):
 
         # TODO: replace with actual forward pass
         z = self.d2(self.d1(z))
-        z = self.u1(z)
-        #z = self.u2(self.u1(z))
+        z = self.u2(self.u1(z))
 
         logits = self.track_head(z)
         raw_depth = self.depth_head(z).squeeze(1)
