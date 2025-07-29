@@ -74,7 +74,7 @@ def train(
 
             #track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
             #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
-            print("depth:", depth.shape, flush=True)
+            print("depth:", depth, flush=True)
             print("raw_depth:", raw_depth.shape, flush=True)
             
             track_loss = track_criterion(logits, track)
