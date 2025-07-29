@@ -12,6 +12,17 @@ from .metrics import DetectionMetric, ConfusionMatrix
 from .models import Detector, load_model, save_model
 from homework.datasets.road_dataset import load_data
 
+def soft_iou(preds, targets, num_classes, eps=1e-6):
+    preds = F.softmax(preds, dim=1)  # shape: (B, C, H, W) for segmentation, (B, C) for classification
+    targets_onehot = F.one_hot(targets, num_classes).permute(0, 2, 1).float()  # shape: (B, C, *)
+    
+    intersection = (preds * targets_onehot).sum(dim=0)
+    union = (preds + targets_onehot - preds * targets_onehot).sum(dim=0)
+    iou = (intersection + eps) / (union + eps)
+    
+    return 1 - iou.mean()
+
+
 def train(
     exp_dir: str = "logs",
     model_name: str = "detector",
@@ -51,6 +62,7 @@ def train(
     val_metric = DetectionMetric(num_classes=3)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    class_weights = torch.tensor([0.2, 0.8, 1.0], device=device)
     track_criterion = torch.nn.CrossEntropyLoss()
     depth_criterion = torch.nn.L1Loss()
     global_step = 0
@@ -75,7 +87,8 @@ def train(
             #track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
             #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
-            track_loss = track_criterion(logits, track)
+            #track_loss = track_criterion(logits, track)
+            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou_loss(logits, track, num_classes)
             depth_loss = depth_criterion(raw_depth, depth)
             loss = track_loss + depth_loss
             loss.backward()
