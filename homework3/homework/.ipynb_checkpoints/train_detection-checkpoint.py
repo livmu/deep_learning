@@ -66,6 +66,8 @@ def train(
             track = x['track'].to(device)
             depth = x['depth'].to(device)
 
+            track = F.interpolate(track.unsqueeze(1).float(), size=(48, 64), mode='nearest').squeeze(1).long()
+            
             # TODO: implement training step
             optimizer.zero_grad()
             logits, raw_depth = model(img)
