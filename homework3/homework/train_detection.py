@@ -9,10 +9,6 @@ import torch.utils.tensorboard as tb
 from .metrics import DetectionMetric, ConfusionMatrix
 from .models import Detector, load_model, save_model
 from homework.datasets.road_dataset import load_data
-#from datasets.road_dataset import load_data
-#from datasets.road_transforms import load_data
-#from datasets.road_utils import load_data
-
 
 def train(
     exp_dir: str = "logs",

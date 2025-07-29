@@ -113,41 +113,38 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-        self.net1 = nn.Sequential(
-            torch.nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1, dilation=1),
+        self.d1 = nn.Sequential(
+            torch.nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
-        self.net2 = nn.Sequential(
-            torch.nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1, dilation=1),
+        
+        self.d2 = nn.Sequential(
+            torch.nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
-
-        self.net3 = nn.Sequential(
-            nn.Conv2d(layer2, layer3, kernel_size=3, padding=1),
+        
+        self.d3 = nn.Sequential(
+            torch.nn.Conv2d(layer2, layer3, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(layer3),
             nn.ReLU(),
         )
 
-        # Decoder
-        self.up1 = nn.Sequential(
-            nn.ConvTranspose2d(layer3, layer2, kernel_size=2, stride=2),
+        self.u1 = nn.Sequential(
+            nn.Conv2d(layer3, layer2, kernel_size=3, padding=1),
+            nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
 
-        self.up2 = nn.Sequential(
-            nn.ConvTranspose2d(layer3, layer1, kernel_size=2, stride=2),
+        self.u2 = nn.Sequential(
+            nn.Conv2d(layer2, layer1, kernel_size=3, padding=1),
+            nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
 
-        self.up3 = nn.Sequential(
-            nn.ConvTranspose2d(layer2, layer1, kernel_size=2, stride=2),
-            nn.ReLU(),
-        )
-
-        self.seg_head = nn.Conv2d(layer3, num_classes, kernel_size=1)
-        self.depth_head = nn.Conv2d(layer3, 1, kernel_size=1)
+        self.seg_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
+        self.depth_head = nn.Conv2d(layer1, 1, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -166,18 +163,11 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        b  = self.net3(self.net2(self.net1(z)))
+        z = self.d2(self.d1(z))
+        z = self.u2(self.u1(z))
 
-        u1 = self.up1(b)
-        u1 = torch.cat([u1, d2], dim=1)
-
-        u2 = self.up2(u1)
-        u2 = torch.cat([u2, d1], dim=1)
-
-        u3 = self.up3(u2)
-
-        logits = self.seg_head(u3)
-        raw_depth = self.depth_head(u3).squeeze(1)
+        logits = self.seg_head(z)
+        raw_depth = self.depth_head(z).squeeze(1)
 
         return logits, raw_depth
 
