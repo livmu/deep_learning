@@ -146,8 +146,8 @@ class Detector(torch.nn.Module):
         self.conv4 = nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=2, padding=1)
         self.batch4 = nn.BatchNorm2d(layer1)
 
-        self.track_head = nn.Conv2d(layer2, num_classes, kernel_size=k, stride=s, padding=p)
-        self.depth_head = nn.Conv2d(layer2, 1, kernel_size=k, stride=s, padding=p)
+        self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=k, stride=s, padding=p)
+        self.depth_head = nn.Conv2d(layer1, 1, kernel_size=k, stride=s, padding=p)
         #self.pool = nn.AdaptiveAvgPool2d((1,1))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
