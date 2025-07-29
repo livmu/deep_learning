@@ -98,7 +98,9 @@ class Detector(torch.nn.Module):
         num_classes: int = 3,
         layer1: int = 16,
         layer2: int = 32,
-        s: int = 1
+        k: int = 3,
+        s: int = 1,
+        p: int = 1
     ):
         """
         A single model that performs segmentation and depth regression
@@ -113,32 +115,32 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
         
         # TODO: implement
-        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=4, stride=s, padding=2)
+        self.conv1 = nn.Conv2d(in_channels, layer1, kernel_size=k, stride=s, padding=p)
         self.batch1 = nn.BatchNorm2d(layer1)
         
         self.down = nn.Sequential(
-            nn.Conv2d(layer1, layer1, kernel_size=4, stride=s, padding=2),
+            nn.Conv2d(layer1, layer1, kernel_size=k, stride=s, padding=p),
             nn.BatchNorm2d(layer1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(layer1, layer1, kernel_size=4, stride=s, padding=2),
+            nn.Conv2d(layer1, layer1, kernel_size=k, stride=s, padding=p),
             nn.BatchNorm2d(layer1),
             nn.ReLU(inplace=True),
         )
 
-        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=4, stride=s, padding=2)
+        self.conv2 = nn.Conv2d(layer1, layer2, kernel_size=k, stride=s, padding=p)
         self.batch2 = nn.BatchNorm2d(layer2)
 
         self.up = nn.Sequential(
-            nn.ConvTranspose2d(layer2, layer2, kernel_size=4, stride=s, padding=2),
+            nn.ConvTranspose2d(layer2, layer2, kernel_size=k, stride=s, padding=p),
             nn.BatchNorm2d(layer2),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(layer2, layer2, kernel_size=4, stride=s, padding=2),
+            nn.ConvTranspose2d(layer2, layer2, kernel_size=k, stride=s, padding=p),
             nn.BatchNorm2d(layer2),
             nn.ReLU(inplace=True),
         )
 
-        self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=4, stride=s, padding=2)
-        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=k, stride=s, padding=p)
+        self.pool = nn.AdaptiveAvgPool2d((1,1))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
