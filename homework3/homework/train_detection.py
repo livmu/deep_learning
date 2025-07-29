@@ -72,8 +72,8 @@ def train(
             optimizer.zero_grad()
             logits, raw_depth = model(img)
 
-            track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
-            depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
+            #track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
+            #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
             track_loss = track_criterion(logits, track)
             depth_loss = depth_criterion(raw_depth, depth)
