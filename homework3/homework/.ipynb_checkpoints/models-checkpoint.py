@@ -190,7 +190,7 @@ class Detector(torch.nn.Module):
         pred = logits.argmax(dim=1)
 
         # Optional additional post-processing for depth only if needed
-        depth = raw_depth
+        depth = torch.clamp(raw_depth, 0.0, 1.0)
 
         return pred, depth
 
