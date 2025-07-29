@@ -98,8 +98,7 @@ class Detector(torch.nn.Module):
         num_classes: int = 3,
         layer1: int = 16,
         layer2: int = 32,
-        s1: int = 5,
-        s2: int = 1,
+        s: int = 5
     ):
         """
         A single model that performs segmentation and depth regression
@@ -115,25 +114,25 @@ class Detector(torch.nn.Module):
 
         # TODO: implement
         self.d1 = nn.Sequential(
-            torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=s1, padding=1),
+            torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=s, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
         
         self.d2 = nn.Sequential(
-            torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=s2, padding=1),
+            torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=s, padding=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
 
-        self.u2 = nn.Sequential(
-            nn.ConvTranspose2d(layer2, layer1, kernel_size=4, stride=s1, padding=1),
+        self.u1 = nn.Sequential(
+            nn.ConvTranspose2d(layer2, layer1, kernel_size=4, stride=s, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
 
-        self.u1 = nn.Sequential(
-            nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=s2, padding=1),
+        self.u2 = nn.Sequential(
+            nn.ConvTranspose2d(layer1, layer1, kernel_size=4, stride=s, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
@@ -159,7 +158,7 @@ class Detector(torch.nn.Module):
 
         # TODO: replace with actual forward pass
         z = self.d2(self.d1(z))
-        z = self.u1(self.u2(z))
+        z = self.u2(self.u1(z))
 
         logits = self.track_head(z)
         raw_depth = self.depth_head(z).squeeze(1)
