@@ -91,7 +91,7 @@ class Classifier(nn.Module):
         return self(x).argmax(dim=1)
 
 
-class Detector(torch.nn.Module):
+class Detector2(torch.nn.Module):
     def __init__(
         self,
         in_channels: int = 3,
@@ -183,6 +183,101 @@ class Detector(torch.nn.Module):
 
         # Optional additional post-processing for depth only if needed
         depth = raw_depth
+
+        return pred, depth
+
+
+class Detector(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        num_classes: int = 3,
+    ):
+        """
+        A single model that performs segmentation and depth regression
+
+        Args:
+            in_channels: int, number of input channels
+            num_classes: int
+        """
+        super().__init__()
+
+        self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
+        self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
+
+        # TODO: implement
+        self.down1 = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+        )
+
+        self.down2 = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+        )
+
+        self.up2 = nn.Sequential(
+            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+        )
+
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(16, 16, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+        )
+
+        self.seg_head = nn.Conv2d(16, num_classes, kernel_size=1)
+        self.depth_head = nn.Conv2d(16, 1, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Used in training, takes an image and returns raw logits and raw depth.
+        This is what the loss functions use as input.
+
+        Args:
+            x (torch.FloatTensor): image with shape (b, 3, h, w) and vals in [0, 1]
+
+        Returns:
+            tuple of (torch.FloatTensor, torch.FloatTensor):
+                - logits (b, num_classes, h, w)
+                - depth (b, h, w)
+        """
+        # optional: normalizes the input
+        z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
+
+        # TODO: replace with actual forward pass
+        d1 = self.down1(z)   # (B, 16, H/2, W/2)
+        d2 = self.down2(d1)  # (B, 32, H/4, W/4)
+        u2 = self.up2(d2)    # (B, 16, H/2, W/2)
+        u1 = self.up1(u2)    # (B, 16, H,   W)
+
+        logits = self.seg_head(u1)               # (B, 3, H, W)
+        raw_depth = self.depth_head(u1).squeeze(1)  # (B, H, W)
+
+        return logits, raw_depth
+
+    def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Used for inference, takes an image and returns class labels and normalized depth.
+        This is what the metrics use as input (this is what the grader will use!).
+
+        Args:
+            x (torch.FloatTensor): image with shape (b, 3, h, w) and vals in [0, 1]
+
+        Returns:
+            tuple of (torch.LongTensor, torch.FloatTensor):
+                - pred: class labels {0, 1, 2} with shape (b, h, w)
+                - depth: normalized depth [0, 1] with shape (b, h, w)
+        """
+        logits, raw_depth = self(x)
+        pred = logits.argmax(dim=1)
+
+        # Optional additional post-processing for depth only if needed
+        depth = torch.clamp(raw_depth, 0.0, 1.0)
 
         return pred, depth
 
