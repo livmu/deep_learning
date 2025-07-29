@@ -67,13 +67,14 @@ def train(
             img = x['image'].to(device)
             track = x['track'].to(device)
             depth = x['depth'].to(device)
-
-            track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
-            depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
             # TODO: implement training step
             optimizer.zero_grad()
             logits, raw_depth = model(img)
+
+            track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
+            depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
+            
             track_loss = track_criterion(logits, track)
             depth_loss = depth_criterion(raw_depth, depth)
             loss = track_loss + depth_loss
