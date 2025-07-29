@@ -98,7 +98,7 @@ class Detector(torch.nn.Module):
         num_classes: int = 3,
         layer1: int = 16,
         layer2: int = 32,
-        s: int = 2
+        s: int = 1
     ):
         """
         A single model that performs segmentation and depth regression
