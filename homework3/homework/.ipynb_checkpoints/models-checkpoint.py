@@ -96,8 +96,8 @@ class Detector(torch.nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 3,
-        layer1: int = 16,
-        layer2: int = 32,
+        layer1: int = 8,
+        layer2: int = 16,
         s: int = 2
     ):
         """
