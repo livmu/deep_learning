@@ -12,7 +12,7 @@ from .metrics import DetectionMetric, ConfusionMatrix
 from .models import Detector, load_model, save_model
 from homework.datasets.road_dataset import load_data
 
-def soft_iou(preds, targets, num_classes, eps=1e-6):
+def soft_iou(preds, targets, num_classes=3, eps=1e-6):
     preds = F.softmax(preds, dim=1)  # shape: (B, C, H, W) for segmentation, (B, C) for classification
     targets_onehot = F.one_hot(targets, num_classes).permute(0, 2, 1).float()  # shape: (B, C, *)
     
@@ -88,7 +88,7 @@ def train(
             #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
             #track_loss = track_criterion(logits, track)
-            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou(logits, track, num_classes)
+            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou(logits, track)
             depth_loss = depth_criterion(raw_depth, depth)
             loss = track_loss + depth_loss
             loss.backward()
