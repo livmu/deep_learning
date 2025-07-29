@@ -160,8 +160,8 @@ class Detector(torch.nn.Module):
         z = self.d2(self.d1(z))
         z = self.u1(self.u2(z))
 
-        logits = self.track_head(u1)
-        raw_depth = self.depth_head(u1).squeeze(1)
+        logits = self.track_head(z)
+        raw_depth = self.depth_head(z).squeeze(1)
 
         return logits, raw_depth
 
