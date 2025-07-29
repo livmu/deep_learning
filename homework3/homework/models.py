@@ -137,7 +137,7 @@ class Detector(torch.nn.Module):
             nn.ReLU(inplace=True),
         )
 
-        self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=1)
+        self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=4, stride=s, padding=2)
         self.pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
