@@ -168,7 +168,7 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        b  = self.net3(self.net2(self.net(z)))
+        b  = self.net3(self.net2(self.net1(z)))
 
         u1 = self.up1(b)
         u1 = torch.cat([u1, d2], dim=1)
