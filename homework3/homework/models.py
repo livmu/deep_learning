@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 HOMEWORK_DIR = Path(__file__).resolve().parent
 INPUT_MEAN = [0.2788, 0.2657, 0.2629]
@@ -168,6 +169,7 @@ class Detector(torch.nn.Module):
 
         logits = self.track_head(z)
         raw_depth = self.depth_head(z).squeeze(1)
+        raw_depth = F.interpolate(raw_depth.unsqueeze(1), size=(x.shape[2], x.shape[3]), mode='bilinear', align_corners=False).squeeze(1)
 
         return logits, raw_depth
 
