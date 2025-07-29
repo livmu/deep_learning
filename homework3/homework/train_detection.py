@@ -88,7 +88,7 @@ def train(
             #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
             #track_loss = track_criterion(logits, track)
-            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou_loss(logits, track, num_classes)
+            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou(logits, track, num_classes)
             depth_loss = depth_criterion(raw_depth, depth)
             loss = track_loss + depth_loss
             loss.backward()
