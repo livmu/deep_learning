@@ -157,10 +157,10 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        d1 = self.down1(z)   # (B, 16, H/2, W/2)
-        d2 = self.down2(d1)  # (B, 32, H/4, W/4)
-        u2 = self.up2(d2)    # (B, 16, H/2, W/2)
-        u1 = self.up1(u2)
+        d1 = self.d1(z)   # (B, 16, H/2, W/2)
+        d2 = self.d2(d1)  # (B, 32, H/4, W/4)
+        u2 = self.u2(d2)    # (B, 16, H/2, W/2)
+        u1 = self.u1(u2)
         #z = self.d2(self.d1(z))
         #z = self.u2(self.u1(z))
 
