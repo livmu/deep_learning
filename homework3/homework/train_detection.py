@@ -1,269 +1,190 @@
+import argparse
+from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.utils.tensorboard as tb
 
-HOMEWORK_DIR = Path(__file__).resolve().parent
-INPUT_MEAN = [0.2788, 0.2657, 0.2629]
-INPUT_STD = [0.2064, 0.1944, 0.2252]
+from .metrics import DetectionMetric, ConfusionMatrix
+from .models import Detector, load_model, save_model
+from homework.datasets.road_dataset import load_data
 
+def soft_iou(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    pred = pred.squeeze(1) if pred.dim() == 4 else pred
+    target = target.squeeze(1) if target.dim() == 4 else target
 
-class Classifier(nn.Module):
-    def __init__(
-        self,
-        in_channels: int = 3,
-        num_classes: int = 6,
-    ):
-        """
-        A convolutional network for image classification.
+    intersection = (pred * target).sum(dim=(1, 2))
+    union = pred.sum(dim=(1, 2)) + target.sum(dim=(1, 2)) - intersection
+    iou = (intersection + eps) / (union + eps)
 
-        Args:
-            in_channels: int, number of input channels
-            num_classes: int
-        """
-        super().__init__()
-
-        self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
-        self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
-
-        # TODO: implement
-        self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(128 * 8 * 8, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.3),
-            nn.Linear(256, num_classes),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: tensor (b, 3, h, w) image
-
-        Returns:
-            tensor (b, num_classes) logits
-        """
-        # optional: normalizes the input
-        z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-
-        # TODO: replace with actual forward pass
-        feats = self.features(z)
-        logits = self.classifier(feats)
-
-        return logits
-
-    def predict(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Used for inference, returns class labels
-        This is what the AccuracyMetric uses as input (this is what the grader will use!).
-        You should not have to modify this function.
-
-        Args:
-            x (torch.FloatTensor): image with shape (b, 3, h, w) and vals in [0, 1]
-
-        Returns:
-            pred (torch.LongTensor): class labels {0, 1, ..., 5} with shape (b, h, w)
-        """
-        return self(x).argmax(dim=1)
+    return 1 - iou.mean()
 
 
-class Detector(torch.nn.Module):
-    def __init__(
-        self,
-        in_channels: int = 3,
-        num_classes: int = 3,
-    ):
-        """
-        A single model that performs segmentation and depth regression
 
-        Args:
-            in_channels: int, number of input channels
-            num_classes: int
-        """
-        super().__init__()
+def train(
+    exp_dir: str = "logs",
+    model_name: str = "detector",
+    num_epoch: int = 20,
+    lr: float = 1e-3,
+    batch_size: int = 128,
+    seed: int = 2024,
+    **kwargs,
+):
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        device = torch.device("mps")
+    else:
+        print("CUDA not available, using CPU")
+        device = torch.device("cpu")
 
-        self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
-        self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
+    # set random seed so each run is deterministic
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
-        # TODO: implement
-        self.down1 = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-        )
+    # directory with timestamp to save tensorboard logs and model checkpoints
+    log_dir = Path(exp_dir) / f"{model_name}_{datetime.now().strftime('%m%d_%H%M%S')}"
+    logger = tb.SummaryWriter(log_dir)
 
-        self.down2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-        )
+    # note: the grader uses default kwargs, you'll have to bake them in for the final submission
+    model = load_model(model_name, **kwargs)
+    model = model.to(device)
+    model.train()
+    
+    train_data = load_data("drive_data/train", transform_pipeline="default", shuffle=True, batch_size=batch_size, num_workers=2)
+    val_data = load_data("drive_data/val", shuffle=False)
+    #train_data, val_data = load_data(dataset_path='')
 
-        self.up2 = nn.Sequential(
-            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-        )
+    # create loss function and optimizer
+    train_metric = DetectionMetric(num_classes=3)
+    val_metric = DetectionMetric(num_classes=3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        self.up1 = nn.Sequential(
-            nn.ConvTranspose2d(16, 16, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-        )
+    class_weights = torch.tensor([0.2, 0.8, 1.0], device=device)
+    track_criterion = torch.nn.CrossEntropyLoss()
+    depth_criterion = torch.nn.L1Loss()
+    global_step = 0
 
-        self.seg_head = nn.Conv2d(16, num_classes, kernel_size=1)
-        self.depth_head = nn.Conv2d(16, 1, kernel_size=1)
+    # training loop
+    for epoch in range(num_epoch):
+        # clear metrics at beginning of epoch
+        train_metric.reset()
+        val_metric.reset()
+        model.train()
+        train_loss_vals = []
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Used in training, takes an image and returns raw logits and raw depth.
-        This is what the loss functions use as input.
+        for x in train_data:
+            img = x['image'].to(device)
+            track = x['track'].to(device)
+            depth = x['depth'].to(device)
+            
+            # TODO: implement training step
+            optimizer.zero_grad()
+            logits, raw_depth = model(img)
 
-        Args:
-            x (torch.FloatTensor): image with shape (b, 3, h, w) and vals in [0, 1]
+            #track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
+            #depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
+            
+            track_loss = track_criterion(logits, track)
+            track_loss = 0.7 * F.cross_entropy(logits, track) + 0.3 * soft_iou(logits, track)
+            depth_loss = depth_criterion(raw_depth, depth)
+            loss = track_loss + depth_loss
+            loss.backward()
+            optimizer.step()
 
-        Returns:
-            tuple of (torch.FloatTensor, torch.FloatTensor):
-                - logits (b, num_classes, h, w)
-                - depth (b, h, w)
-        """
-        # optional: normalizes the input
-        z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
+            train_loss_vals.append(loss.item())
+            preds = torch.argmax(logits, dim=1)
+            train_metric.add(preds, track, raw_depth, depth)
 
-        # TODO: replace with actual forward pass
-        d1 = self.down1(z)   # (B, 16, H/2, W/2)
-        d2 = self.down2(d1)  # (B, 32, H/4, W/4)
-        u2 = self.up2(d2)    # (B, 16, H/2, W/2)
-        u1 = self.up1(u2)    # (B, 16, H,   W)
+            logger.add_scalar("train_loss", loss.item(), global_step)
+            global_step += 1
+        
 
-        logits = self.seg_head(u1)               # (B, 3, H, W)
-        raw_depth = self.depth_head(u1).squeeze(1)  # (B, H, W)
+        # disable gradient computation and switch to evaluation mode
+        with torch.inference_mode():
+            model.eval()
+            val_loss_vals = []
 
-        return logits, raw_depth
+            for x in val_data:
+                img = x['image'].to(device)
+                track = x['track'].to(device)
+                depth = x['depth'].to(device)
+        
+                # TODO: compute validation accuracy
+                logits, raw_depth = model(img)
+                track_loss = track_criterion(logits, track)
+                depth_loss = depth_criterion(raw_depth, depth)
+                loss = track_loss + depth_loss
+                val_loss_vals.append(loss.item())
+                
+                preds = torch.argmax(logits, dim=1)
+                val_metric.add(preds, track, raw_depth, depth)
 
-    def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Used for inference, takes an image and returns class labels and normalized depth.
-        This is what the metrics use as input (this is what the grader will use!).
+        # log average train and val accuracy to tensorboard
+        train = train_metric.compute()
+        train_acc = train['accuracy']
+        train_iou = train['iou']
+        train_err = train['abs_depth_error']
+        train_tp_err = train['tp_depth_error']
+        train_loss = np.mean(train_loss_vals)
+        
+        val = val_metric.compute()
+        val_acc = val['accuracy']
+        val_iou = val['iou']
+        val_err = val['abs_depth_error']
+        val_tp_err = val['tp_depth_error']
+        val_loss = np.mean(val_loss_vals)
 
-        Args:
-            x (torch.FloatTensor): image with shape (b, 3, h, w) and vals in [0, 1]
+        logger.add_scalar("train_acc", train_acc, global_step)
+        logger.add_scalar("train_iou", train_iou, global_step)
+        logger.add_scalar("train_err", train_err, global_step)
+        logger.add_scalar("train_tp_err", train_tp_err, global_step)
+        logger.add_scalar("train_loss", train_loss, global_step)
 
-        Returns:
-            tuple of (torch.LongTensor, torch.FloatTensor):
-                - pred: class labels {0, 1, 2} with shape (b, h, w)
-                - depth: normalized depth [0, 1] with shape (b, h, w)
-        """
-        logits, raw_depth = self(x)
-        pred = logits.argmax(dim=1)
+        logger.add_scalar("val_acc", val_acc, global_step)
+        logger.add_scalar("val_iou", val_iou, global_step)
+        logger.add_scalar("val_err", val_err, global_step)
+        logger.add_scalar("val_tp_err", val_tp_err, global_step)
+        logger.add_scalar("val_loss", val_loss, global_step)
 
-        # Optional additional post-processing for depth only if needed
-        depth = torch.clamp(raw_depth, 0.0, 1.0)
+        # print on first, last, every 10th epoch
+        if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
+            print(
+                f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
+                f"train_acc={train_acc:.4f} "
+                f"train_iou={train_iou:.4f} "
+                f"train_err={train_err:.4f} "
+                f"train_tp_err={train_tp_err:.4f} "
+                f"train_loss={train_loss:.4f} "
+                f"val_acc={val_acc:.4f}"
+                f"val_iou={val_iou:.4f} "
+                f"val_err={val_err:.4f} "
+                f"val_tp_err={val_tp_err:.4f} "
+                f"val_loss={val_loss:.4f} "
+            )
 
-        return pred, depth
+    # save and overwrite the model in the root directory for grading
+    save_model(model)
 
-
-MODEL_FACTORY = {
-    "classifier": Classifier,
-    "detector": Detector,
-}
-
-
-def load_model(
-    model_name: str,
-    with_weights: bool = False,
-    **model_kwargs,
-) -> torch.nn.Module:
-    """
-    Called by the grader to load a pre-trained model by name
-    """
-    m = MODEL_FACTORY[model_name](**model_kwargs)
-
-    if with_weights:
-        model_path = HOMEWORK_DIR / f"{model_name}.th"
-        assert model_path.exists(), f"{model_path.name} not found"
-
-        try:
-            m.load_state_dict(torch.load(model_path, map_location="cpu"))
-        except RuntimeError as e:
-            raise AssertionError(
-                f"Failed to load {model_path.name}, make sure the default model arguments are set correctly"
-            ) from e
-
-    # limit model sizes since they will be zipped and submitted
-    model_size_mb = calculate_model_size_mb(m)
-
-    if model_size_mb > 20:
-        raise AssertionError(f"{model_name} is too large: {model_size_mb:.2f} MB")
-
-    return m
-
-
-def save_model(model: torch.nn.Module) -> str:
-    """
-    Use this function to save your model in train.py
-    """
-    model_name = None
-
-    for n, m in MODEL_FACTORY.items():
-        if type(model) is m:
-            model_name = n
-
-    if model_name is None:
-        raise ValueError(f"Model type '{str(type(model))}' not supported")
-
-    output_path = HOMEWORK_DIR / f"{model_name}.th"
-    torch.save(model.state_dict(), output_path)
-
-    return output_path
-
-
-def calculate_model_size_mb(model: torch.nn.Module) -> float:
-    """
-    Args:
-        model: torch.nn.Module
-
-    Returns:
-        float, size in megabytes
-    """
-    return sum(p.numel() for p in model.parameters()) * 4 / 1024 / 1024
-
-
-def debug_model(batch_size: int = 1):
-    """
-    Test your model implementation
-
-    Feel free to add additional checks to this function -
-    this function is NOT used for grading
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    sample_batch = torch.rand(batch_size, 3, 64, 64).to(device)
-
-    print(f"Input shape: {sample_batch.shape}")
-
-    model = load_model("classifier", in_channels=3, num_classes=6).to(device)
-    output = model(sample_batch)
-
-    # should output logits (b, num_classes)
-    print(f"Output shape: {output.shape}")
+    # save a copy of model weights in the log directory
+    torch.save(model.state_dict(), log_dir / f"{model_name}.th")
+    print(f"Model saved to {log_dir / f'{model_name}.th'}")
 
 
 if __name__ == "__main__":
-    debug_model()
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--exp_dir", type=str, default="logs")
+    parser.add_argument("--model_name", type=str, required=True)
+    parser.add_argument("--num_epoch", type=int, default=20)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--seed", type=int, default=2024)
+
+    # optional: additional model hyperparamters
+    # parser.add_argument("--num_layers", type=int, default=3)
+
+    # pass all arguments to train
+    train(**vars(parser.parse_args()))
