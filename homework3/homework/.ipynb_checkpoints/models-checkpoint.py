@@ -127,7 +127,7 @@ class Detector(torch.nn.Module):
 
         self.u1 = nn.Sequential(
             nn.Conv2d(layer2, layer1, kernel_size=3, padding=1),
-            nn.BatchNorm2d(layer2),
+            nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
 
@@ -137,7 +137,7 @@ class Detector(torch.nn.Module):
             nn.ReLU(),
         )
 
-        self.seg_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
+        self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
         self.depth_head = nn.Conv2d(layer1, 1, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -160,7 +160,7 @@ class Detector(torch.nn.Module):
         z = self.d2(self.d1(z))
         z = self.u2(self.u1(z))
 
-        logits = self.seg_head(z)
+        logits = self.track_head(z)
         raw_depth = self.depth_head(z).squeeze(1)
 
         return logits, raw_depth
