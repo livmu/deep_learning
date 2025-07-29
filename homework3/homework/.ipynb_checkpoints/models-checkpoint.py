@@ -166,7 +166,7 @@ class Detector(torch.nn.Module):
         z = self.up(z)
 
         logits = self.conv3(z)
-        raw_depth = self.pool(z).squeeze(1)
+        raw_depth = self.pool(z).squeeze(-1).squeeze(-1)
 
         return logits, raw_depth
 
