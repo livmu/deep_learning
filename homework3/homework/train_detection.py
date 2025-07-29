@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.tensorboard as tb
 
 from .metrics import DetectionMetric, ConfusionMatrix
@@ -67,7 +68,8 @@ def train(
             track = x['track'].to(device)
             depth = x['depth'].to(device)
 
-            track = nn.functional.interpolate(track.unsqueeze(1).float(), size=(48, 64), mode='nearest').squeeze(1).long()
+            track = F.interpolate(track.unsqueeze(1).float(), size=logits.shape[-2:]).squeeze(1).long()
+            depth = F.interpolate(depth.unsqueeze(1), size=raw_depth.shape[-2:]).squeeze(1)
             
             # TODO: implement training step
             optimizer.zero_grad()
