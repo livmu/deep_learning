@@ -57,62 +57,99 @@ def train(
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
-    train_metric = DetectionMetric()
-    val_metric = DetectionMetric()
+    train_metric = DetectionMetric(num_classes=3)
+    val_metric = DetectionMetric(num_classes=3)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
-    metrics = {"train_acc": [], "val_acc": []}
 
     # training loop
     for epoch in range(num_epoch):
         # clear metrics at beginning of epoch
-        for key in metrics:
-            metrics[key].clear()
-
+        train_metric.reset()
+        val_metric.reset()
         model.train()
+        train_loss_vals = []
 
-        for img, label in train_data:
-            img, label = img.to(device), label.to(device)
+        for img, seg, depth in train_data:
+            img, seg, depth = img.to(device), seg.to(device), depth.to(device)
 
             # TODO: implement training step
             optimizer.zero_grad()
-            logits = model(img)
-            loss = torch.nn.functional.cross_entropy(logits, label)
+            logits, raw_depth = model(img)
+            seg_loss = torch.nn.CrossEntropyLoss(logits, seg)
+            depth_loss = torch.nn.L1Loss(raw_depth, depth)
+            loss = seg_loss + depth_loss
             loss.backward()
             optimizer.step()
 
+            train_loss_vals.append(loss.item())
             preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, label)
+            train_metric.add(preds, seg, raw_depth, depth)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
             global_step += 1
+        
 
         # disable gradient computation and switch to evaluation mode
         with torch.inference_mode():
             model.eval()
+            val_loss_vals = []
 
-            for img, label in val_data:
-                img, label = img.to(device), label.to(device)
+            for img, seg, depth in val_data:
+                img, seg, depth = img.to(device), seg.to(device), depth.to(device)
         
                 # TODO: compute validation accuracy
-                logits = model(img)
+                logits, raw_depth = model(img)
+                seg_loss = torch.nn.CrossEntropyLoss(logits, seg)
+                depth_loss = torch.nn.L1Loss(raw_depth, depth)
+                loss = seg_loss + depth_loss
+                val_loss_vals.append(loss.item())
+                
                 preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, label)
+                val_metric.add(preds, seg, raw_depth, depth)
 
         # log average train and val accuracy to tensorboard
-        train_acc = train_metric.compute()['accuracy']
-        val_acc = val_metric.compute()['accuracy']
+        train = train_metric.compute()
+        train_acc = train['accuracy']
+        train_iou = train['iou']
+        train_err = train['abs_depth_error']
+        train_tp_err = train['tp_depth_error']
+        train_loss = np.mean(train_loss_vals)
+        
+        val = val_metric.compute()
+        val_acc = val['accuracy']
+        val_iou = val['iou']
+        val_err = val['abs_depth_error']
+        val_tp_err = val['tp_depth_error']
+        val_loss = np.mean(val_loss_vals)
 
         logger.add_scalar("train_acc", train_acc, global_step)
+        logger.add_scalar("train_iou", train_iou, global_step)
+        logger.add_scalar("train_err", train_err, global_step)
+        logger.add_scalar("train_tp_err", train_tp_err, global_step)
+        logger.add_scalar("train_loss", train_loss, global_step)
+
         logger.add_scalar("val_acc", val_acc, global_step)
+        logger.add_scalar("val_iou", val_iou, global_step)
+        logger.add_scalar("val_err", val_err, global_step)
+        logger.add_scalar("val_tp_err", val_tp_err, global_step)
+        logger.add_scalar("val_loss", val_loss, global_step)
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
                 f"train_acc={train_acc:.4f} "
+                f"train_iou={train_iou:.4f} "
+                f"train_err={train_err:.4f} "
+                f"train_tp_err={train_tp_err:.4f} "
+                f"train_loss={train_loss:.4f} "
                 f"val_acc={val_acc:.4f}"
+                f"val_iou={val_iou:.4f} "
+                f"val_err={val_err:.4f} "
+                f"val_tp_err={val_tp_err:.4f} "
+                f"val_loss={val_loss:.4f} "
             )
 
     # save and overwrite the model in the root directory for grading
