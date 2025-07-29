@@ -116,25 +116,25 @@ class Detector(torch.nn.Module):
         self.d1 = nn.Sequential(
             torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
         )
         
         self.d2 = nn.Sequential(
             torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer2),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
         )
 
         self.u2 = nn.Sequential(
             nn.Conv2d(layer2, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
         )
 
         self.u1 = nn.Sequential(
             nn.Conv2d(layer1, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
         )
 
         self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
