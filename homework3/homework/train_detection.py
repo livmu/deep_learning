@@ -40,14 +40,6 @@ def train(
     model = model.to(device)
     model.train()
     
-    # change
-    train_data = load_data(
-        dataset_path="drive_data/train",
-        transform_pipeline="default",
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=2,
-    )
     train_data = load_data("drive_data/train", transform_pipeline="default", shuffle=True, batch_size=batch_size, num_workers=2)
     val_data = load_data("drive_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
@@ -57,6 +49,8 @@ def train(
     val_metric = DetectionMetric(num_classes=3)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    track_criterion = torch.nn.CrossEntropyLoss()
+    depth_criterion = torch.nn.L1Loss()
     global_step = 0
 
     # training loop
@@ -69,21 +63,21 @@ def train(
 
         for x in train_data:
             img = x['image'].to(device)
-            seg = x['track'].to(device)
+            track = x['track'].to(device)
             depth = x['depth'].to(device)
 
             # TODO: implement training step
             optimizer.zero_grad()
             logits, raw_depth = model(img)
-            seg_loss = torch.nn.CrossEntropyLoss(logits, seg)
-            depth_loss = torch.nn.L1Loss(raw_depth, depth)
-            loss = seg_loss + depth_loss
+            track_loss = track_criterion(logits, track)
+            depth_loss = depth_criterion(raw_depth, depth)
+            loss = track_loss + depth_loss
             loss.backward()
             optimizer.step()
 
             train_loss_vals.append(loss.item())
             preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, seg, raw_depth, depth)
+            train_metric.add(preds, track, raw_depth, depth)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
             global_step += 1
@@ -96,18 +90,18 @@ def train(
 
             for x in val_data:
                 img = x['image'].to(device)
-                seg = x['track'].to(device)
+                track = x['track'].to(device)
                 depth = x['depth'].to(device)
         
                 # TODO: compute validation accuracy
                 logits, raw_depth = model(img)
-                seg_loss = torch.nn.CrossEntropyLoss(logits, seg)
-                depth_loss = torch.nn.L1Loss(raw_depth, depth)
-                loss = seg_loss + depth_loss
+                track_loss = track_criterion(logits, track)
+                depth_loss = depth_criterion(raw_depth, depth)
+                loss = track_loss + depth_loss
                 val_loss_vals.append(loss.item())
                 
                 preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, seg, raw_depth, depth)
+                val_metric.add(preds, track, raw_depth, depth)
 
         # log average train and val accuracy to tensorboard
         train = train_metric.compute()
