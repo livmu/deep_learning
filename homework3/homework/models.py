@@ -114,25 +114,25 @@ class Detector(torch.nn.Module):
 
         # TODO: implement
         self.d1 = nn.Sequential(
-            torch.nn.Conv2d(in_channels, layer1, kernel_size=3, stride=2, padding=1),
+            torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
         
         self.d2 = nn.Sequential(
-            torch.nn.Conv2d(layer1, layer2, kernel_size=3, stride=1, padding=1),
+            torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer2),
             nn.ReLU(),
         )
 
         self.u1 = nn.Sequential(
-            nn.Conv2d(layer2, layer1, kernel_size=3, padding=1),
+            nn.Conv2d(layer2, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
 
         self.u2 = nn.Sequential(
-            nn.Conv2d(layer1, layer1, kernel_size=3, padding=1),
+            nn.Conv2d(layer1, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
             nn.ReLU(),
         )
