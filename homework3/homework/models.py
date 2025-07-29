@@ -116,25 +116,25 @@ class Detector(torch.nn.Module):
         self.d1 = nn.Sequential(
             torch.nn.Conv2d(in_channels, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
         )
         
         self.d2 = nn.Sequential(
             torch.nn.Conv2d(layer1, layer2, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer2),
-            nn.ReLU(inplace=True),
-        )
-
-        self.u1 = nn.Sequential(
-            nn.Conv2d(layer2, layer1, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(layer1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
         )
 
         self.u2 = nn.Sequential(
+            nn.Conv2d(layer2, layer1, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(layer1),
+            nn.ReLU(),
+        )
+
+        self.u1 = nn.Sequential(
             nn.Conv2d(layer1, layer1, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(layer1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
         )
 
         self.track_head = nn.Conv2d(layer1, num_classes, kernel_size=1)
@@ -157,12 +157,8 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
         # TODO: replace with actual forward pass
-        d1 = self.d1(z)   # (B, 16, H/2, W/2)
-        d2 = self.d2(d1)  # (B, 32, H/4, W/4)
-        u2 = self.u2(d2)    # (B, 16, H/2, W/2)
-        u1 = self.u1(u2)
-        #z = self.d2(self.d1(z))
-        #z = self.u2(self.u1(z))
+        z = self.d2(self.d1(z))
+        z = self.u2(self.u1(z))
 
         logits = self.track_head(u1)
         raw_depth = self.depth_head(u1).squeeze(1)
@@ -186,7 +182,6 @@ class Detector(torch.nn.Module):
         pred = logits.argmax(dim=1)
 
         # Optional additional post-processing for depth only if needed
-        #depth = torch.clamp(raw_depth, 0.0, 1.0)
         depth = raw_depth
 
         return pred, depth
