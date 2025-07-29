@@ -140,6 +140,7 @@ class Detector(torch.nn.Module):
         )
 
         self.conv3 = nn.Conv2d(layer2, num_classes, kernel_size=k, stride=s, padding=p)
+        self.conv4 = nn.Conv2d(layer2, 1, kernel_size=k, stride=s, padding=p)
         self.pool = nn.AdaptiveAvgPool2d((1,1))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -165,8 +166,9 @@ class Detector(torch.nn.Module):
         z = self.batch2(self.conv2(z))
         z = self.up(z)
 
+        z = self.pool(z)
         logits = self.conv3(z)
-        raw_depth = self.pool(z)
+        raw_depth = self.conv4(z)
 
         return logits, raw_depth
 
