@@ -83,8 +83,8 @@ class TransformerPlanner(nn.Module):
         
         self.net = torch.nn.Sequential(
             torch.nn.Embedding(n_waypoints, d_model),
-            nn.TransformerDecoder(decoder_layer, num_layers=num_layers,
-            torch.nn.Linear(d_model, n_waypoints)
+            nn.TransformerDecoder(decoder_layer, num_layers=num_layers),
+            torch.nn.Linear(d_model, n_waypoints),
         )
 
     def forward(
