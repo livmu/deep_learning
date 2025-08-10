@@ -22,6 +22,7 @@ from homework.datasets.road_dataset import load_data
 def train(
     exp_dir: str = "logs",
     model_name: str = "mlp_planner",
+    transform_pipeline: str = "state_only",
     num_epoch: int = 50,
     lr: float = 1e-3,
     batch_size: int = 128,
@@ -50,15 +51,14 @@ def train(
     model.train()
     
     # change
-    train_data = load_data("drive_data/train", transform_pipeline='state_only', shuffle=True, batch_size=batch_size, num_workers=4)
+    train_data = load_data("drive_data/train", transform_pipeline=transform_pipeline, shuffle=True, batch_size=batch_size, num_workers=4)
     val_data = load_data("drive_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
     train_metric = PlannerMetric()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    weights = torch.tensor([0.2, 0.8, 1.0], device=device)
+    #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
     criterion = torch.nn.MSELoss()
 
     global_step = 0
@@ -73,15 +73,20 @@ def train(
         model.train()
 
         for batch in train_data:
-            img = batch.get("image").to(device)
-            track_left = batch.get("track_left").to(device)
-            track_right = batch.get("track_right").to(device)
+            if "image" in batch:
+                img = batch.get("image").to(device)
+                logits = model(img)
+            else:
+                track_left = batch.get("track_left").to(device)
+                track_right = batch.get("track_right").to(device)
+                logits = model(track_left=track_left, track_right=track_right)
+            
             waypoints = batch.get("waypoints").to(device)
-            waypoints_mask = batch.get("waypoints_mask").to(device)
+            #waypoints_mask = batch.get("waypoints_mask").to(device)
 
             # TODO: implement training step
             optimizer.zero_grad()
-            logits = model(img)
+            
             loss = criterion(logits, waypoints)
             loss.backward()
             optimizer.step()
