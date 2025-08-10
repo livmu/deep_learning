@@ -92,7 +92,7 @@ def train(
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, label)
+            train_metric.add(preds, waypoints)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
             global_step += 1
@@ -102,17 +102,22 @@ def train(
             model.eval()
 
             for batch in val_data:
-                img = batch.get("image").to(device)
-                track_left = batch.get("track_left").to(device)
-                track_right = batch.get("track_right").to(device)
+                if "image" in batch:
+                    img = batch.get("image").to(device)
+                    logits = model(img)
+                else:
+                    track_left = batch.get("track_left").to(device)
+                    track_right = batch.get("track_right").to(device)
+                    logits = model(track_left=track_left, track_right=track_right)
+                    
                 waypoints = batch.get("waypoints").to(device)
-                waypoints_mask = batch.get("waypoints_mask").to(device)
+                #waypoints_mask = batch.get("waypoints_mask").to(device)
         
                 # TODO: compute validation accuracy
-                logits = model(img)
+                
                 #loss = criterion(logits, waypoints)
                 preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, label)
+                val_metric.add(preds, waypoints)
 
         # log average train and val accuracy to tensorboard
         train_acc = train_metric.compute()['accuracy']
