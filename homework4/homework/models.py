@@ -1,146 +1,202 @@
+from pathlib import Path
+
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
+import torch.nn as nn
 
-from homework.datasets.road_dataset import load_data
-from homework.metrics import PlannerMetric
-from homework.models import MODEL_FACTORY, save_model
+HOMEWORK_DIR = Path(__file__).resolve().parent
+INPUT_MEAN = [0.2788, 0.2657, 0.2629]
+INPUT_STD = [0.2064, 0.1944, 0.2252]
 
 
-def train(
-    model_name: str = "linear_planner",
-    transform_pipeline: str = "state_only",
-    num_workers: int = 4,
-    lr: float = 1e-3,
-    batch_size: int = 128,
-    num_epoch: int = 40,
-    train_path: str = "drive_data/train",
-    val_path: str = "drive_data/val",
-    device: str = "cuda",
-):
+class LinearPlanner(nn.Module):
     """
-    General training function for road planners.
-
-    Example usage:
-        for lr in [1e-2, 1e-3, 1e-4]:
-            train(
-                model_name="linear_planner",
-                transform_pipeline="state_only",
-                num_workers=4,
-                lr=lr,
-                batch_size=128,
-                num_epoch=40,
-            )
+    A very simple "linear" planner with no hidden layers.
+    Just flattens (track_left, track_right) -> outputs n_waypoints * 2
     """
-    device = torch.device(device if torch.cuda.is_available() else "cpu")
+    def __init__(self, n_track=10, n_waypoints=3):
+        super().__init__()
+        self.n_track = n_track
+        self.n_waypoints = n_waypoints
 
-    # -------------------------
-    # 1) Load the dataset
-    # -------------------------
-    train_loader = load_data(
-        dataset_path=train_path,
-        transform_pipeline=transform_pipeline,
-        return_dataloader=True,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        shuffle=True,
-    )
-    val_loader = load_data(
-        dataset_path=val_path,
-        transform_pipeline=transform_pipeline,
-        return_dataloader=True,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        shuffle=False,
-    )
+        # Flatten (left/right) track: 2 sides * n_track points * 2 coords
+        input_dim = 2 * n_track * 2
+        output_dim = n_waypoints * 2
+        self.linear = nn.Linear(input_dim, output_dim)
 
-    print(f"Training model '{model_name}' for {num_epoch} epochs, lr={lr}, batch_size={batch_size} ...")
+    def forward(self, track_left: torch.Tensor, track_right: torch.Tensor, **kwargs) -> torch.Tensor:
+        bsz = track_left.shape[0]
+        # Concatenate left/right boundaries
+        x = torch.cat([track_left, track_right], dim=1)  # (B, 2*n_track, 2)
+        x = x.view(bsz, -1)                              # (B, 2*n_track*2)
+        out = self.linear(x)                             # (B, n_waypoints*2)
+        return out.view(bsz, self.n_waypoints, 2)        # (B, n_waypoints, 2)
 
-    # -------------------------
-    # 2) Create the model & optimizer
-    # -------------------------
-    if model_name not in MODEL_FACTORY:
-        raise ValueError(f"Unknown model_name='{model_name}'. Available: {list(MODEL_FACTORY.keys())}")
 
-    # Instantiate the model
-    model = MODEL_FACTORY[model_name]()  # if you have custom kwargs, add them here
-    model.to(device)
+class MLPPlanner(nn.Module):
+    def __init__(self, n_track=10, n_waypoints=3, hidden_dim=128):
+        """
+        A simple MLP with two hidden layers.
+        """
+        super().__init__()
+        self.n_track = n_track
+        self.n_waypoints = n_waypoints
 
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = F.smooth_l1_loss  # Huber / L1 / MSE can all work
+        input_dim = 2 * n_track * 2  # left+right boundaries, each n_track points, 2 coords
+        output_dim = n_waypoints * 2
 
-    # We'll track validation performance with PlannerMetric
-    metric = PlannerMetric()
-
-    # -------------------------
-    # 3) Training loop
-    # -------------------------
-    for epoch in range(num_epoch):
-        model.train()
-        total_train_loss = 0.0
-
-        for batch in train_loader:
-            # For "state_only" pipeline, the batch will have track_left, track_right, waypoints, waypoints_mask
-            # For "default", it will have image, track_left, track_right, etc.
-
-            if "image" in batch:
-                # e.g., training CNN
-                inputs = batch["image"].to(device)
-                preds = model(inputs)
-            else:
-                # e.g., training MLP/Transformer/Linear
-                track_left = batch["track_left"].to(device)
-                track_right = batch["track_right"].to(device)
-                preds = model(track_left=track_left, track_right=track_right)
-
-            # Supervised label
-            waypoints = batch["waypoints"].to(device)
-
-            loss = loss_fn(preds, waypoints)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            total_train_loss += loss.item()
-
-        avg_train_loss = total_train_loss / len(train_loader)
-
-        # -------------------------
-        # 4) Validation
-        # -------------------------
-        model.eval()
-        metric.reset()
-        total_val_loss = 0.0
-        with torch.no_grad():
-            for batch in val_loader:
-                if "image" in batch:
-                    inputs = batch["image"].to(device)
-                    preds = model(inputs)
-                else:
-                    track_left = batch["track_left"].to(device)
-                    track_right = batch["track_right"].to(device)
-                    preds = model(track_left=track_left, track_right=track_right)
-
-                waypoints = batch["waypoints"].to(device)
-                val_loss = loss_fn(preds, waypoints)
-                total_val_loss += val_loss.item()
-
-                waypoints_mask = batch["waypoints_mask"].to(device)
-                metric.add(preds, waypoints, waypoints_mask)
-
-        avg_val_loss = total_val_loss / len(val_loader)
-        results = metric.compute()  # dict with "l1_error", "longitudinal_error", "lateral_error", etc.
-
-        print(
-            f"[Epoch {epoch+1}/{num_epoch}] "
-            f"Train Loss: {avg_train_loss:.4f} | "
-            f"Val Loss: {avg_val_loss:.4f} | "
-            f"Long Err: {results['longitudinal_error']:.4f} | "
-            f"Lat Err: {results['lateral_error']:.4f}"
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim),
         )
 
-    # -------------------------
-    # 5) Save final model
-    # -------------------------
-    save_model(model)
-    print(f"Training complete. Saved '{model_name}.th'!\n")
+    def forward(self, track_left: torch.Tensor, track_right: torch.Tensor, **kwargs) -> torch.Tensor:
+        bsz = track_left.shape[0]
+        x = torch.cat([track_left, track_right], dim=1)  # (B, 2*n_track, 2)
+        x = x.view(bsz, -1)                              # (B, input_dim)
+        out = self.net(x)                                # (B, n_waypoints*2)
+        return out.view(bsz, self.n_waypoints, 2)        # (B, n_waypoints, 2)
+
+
+class TransformerPlanner(nn.Module):
+    def __init__(self, n_track=10, n_waypoints=3, d_model=64, nhead=8, num_layers=2, dim_feedforward=256):
+        """
+        Example Transformer-based planner that uses cross attention.
+        """
+        super().__init__()
+        self.n_track = n_track
+        self.n_waypoints = n_waypoints
+        self.d_model = d_model
+
+        # Input embedding for track points
+        self.input_embed = nn.Linear(2, d_model)
+
+        # Waypoint query embeddings
+        self.query_embed = nn.Embedding(n_waypoints, d_model)
+
+        # Transformer Decoder
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=False,  # Expect shape (seq, batch, embed)
+        )
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+
+        # Final linear layer -> 2D coords
+        self.output_fc = nn.Linear(d_model, 2)
+
+    def forward(self, track_left: torch.Tensor, track_right: torch.Tensor, **kwargs) -> torch.Tensor:
+        bsz = track_left.shape[0]
+
+        # Concatenate left/right boundaries -> (B, 2*n_track, 2)
+        track_points = torch.cat([track_left, track_right], dim=1)
+
+        # Embed track points -> (B, 2*n_track, d_model)
+        track_emb = self.input_embed(track_points)
+
+        # The decoder expects (seq_len, batch, d_model)
+        memory = track_emb.transpose(0, 1)  # (2*n_track, B, d_model)
+
+        # Query embeddings: (n_waypoints, d_model) -> expand to (n_waypoints, B, d_model)
+        queries = self.query_embed.weight.unsqueeze(1).repeat(1, bsz, 1)
+
+        # Cross-attention: queries -> memory
+        decoded = self.transformer_decoder(tgt=queries, memory=memory)  # (n_waypoints, B, d_model)
+        out = self.output_fc(decoded)                                   # (n_waypoints, B, 2)
+        out = out.transpose(0, 1)                                       # (B, n_waypoints, 2)
+        return out
+
+
+class CNNPlanner(nn.Module):
+    def __init__(self, n_waypoints=3):
+        super().__init__()
+        self.n_waypoints = n_waypoints
+
+        self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN).float().view(1, -1, 1, 1), persistent=False)
+        self.register_buffer("input_std", torch.as_tensor(INPUT_STD).float().view(1, -1, 1, 1), persistent=False)
+
+        # A small CNN backbone
+        self.backbone = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+        )
+        # After these layers, (3, 96, 128) -> (64, 12, 16)
+        fc_in = 64 * 12 * 16
+
+        self.fc = nn.Sequential(
+            nn.Linear(fc_in, 128),
+            nn.ReLU(),
+            nn.Linear(128, n_waypoints * 2),
+        )
+
+    def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
+        # Normalize
+        x = (image - self.input_mean) / self.input_std
+        x = self.backbone(x)
+        x = x.view(x.shape[0], -1)
+        x = self.fc(x)
+        return x.view(x.shape[0], self.n_waypoints, 2)
+
+
+##############################################
+# Model factory + load/save utilities
+##############################################
+
+MODEL_FACTORY = {
+    "linear_planner": LinearPlanner,
+    "mlp_planner": MLPPlanner,
+    "transformer_planner": TransformerPlanner,
+    "cnn_planner": CNNPlanner,
+}
+
+
+def calculate_model_size_mb(model: nn.Module) -> float:
+    return sum(p.numel() for p in model.parameters()) * 4 / (1024 * 1024)
+
+
+def load_model(model_name: str, with_weights: bool = False, **model_kwargs) -> nn.Module:
+    """
+    Called by the grader or user code to instantiate a model from MODEL_FACTORY
+    and optionally load pretrained weights from <model_name>.th
+    """
+    if model_name not in MODEL_FACTORY:
+        raise ValueError(f"Unknown model_name='{model_name}'. Must be one of {list(MODEL_FACTORY.keys())}")
+    model_cls = MODEL_FACTORY[model_name]
+    model = model_cls(**model_kwargs)
+
+    if with_weights:
+        model_path = HOMEWORK_DIR / f"{model_name}.th"
+        if not model_path.exists():
+            raise FileNotFoundError(f"Could not find {model_path.name} in {HOMEWORK_DIR}")
+        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+
+    model_size_mb = calculate_model_size_mb(model)
+    if model_size_mb > 20:
+        raise AssertionError(f"Model '{model_name}' is too large: {model_size_mb:.2f} MB")
+
+    return model
+
+
+def save_model(model: nn.Module) -> str:
+    """
+    Use this function to save your model in the homework directory.
+    The file name is automatically determined by the class type -> <model_name>.th
+    """
+    model_name = None
+    for name, cls in MODEL_FACTORY.items():
+        if isinstance(model, cls):
+            model_name = name
+            break
+    if model_name is None:
+        raise ValueError(f"Model type '{type(model)}' not recognized in MODEL_FACTORY")
+
+    output_path = HOMEWORK_DIR / f"{model_name}.th"
+    torch.save(model.state_dict(), output_path)
+    return str(output_path)
