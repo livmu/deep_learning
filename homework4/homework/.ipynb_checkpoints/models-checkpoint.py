@@ -1,171 +1,146 @@
-from pathlib import Path
-
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
-HOMEWORK_DIR = Path(__file__).resolve().parent
-INPUT_MEAN = [0.2788, 0.2657, 0.2629]
-INPUT_STD = [0.2064, 0.1944, 0.2252]
-
-
-class MLPPlanner(nn.Module):
-    def __init__(
-        self,
-        n_track: int = 10,
-        n_waypoints: int = 3,
-    ):
-        """
-        Args:
-            n_track (int): number of points in each side of the track
-            n_waypoints (int): number of waypoints to predict
-        """
-        super().__init__()
-
-        self.n_track = n_track
-        self.n_waypoints = n_waypoints
-
-    def forward(
-        self,
-        track_left: torch.Tensor,
-        track_right: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Predicts waypoints from the left and right boundaries of the track.
-
-        During test time, your model will be called with
-        model(track_left=..., track_right=...), so keep the function signature as is.
-
-        Args:
-            track_left (torch.Tensor): shape (b, n_track, 2)
-            track_right (torch.Tensor): shape (b, n_track, 2)
-
-        Returns:
-            torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
-        """
-        raise NotImplementedError
+from homework.datasets.road_dataset import load_data
+from homework.metrics import PlannerMetric
+from homework.models import MODEL_FACTORY, save_model
 
 
-class TransformerPlanner(nn.Module):
-    def __init__(
-        self,
-        n_track: int = 10,
-        n_waypoints: int = 3,
-        d_model: int = 64,
-    ):
-        super().__init__()
-
-        self.n_track = n_track
-        self.n_waypoints = n_waypoints
-
-        self.query_embed = nn.Embedding(n_waypoints, d_model)
-
-    def forward(
-        self,
-        track_left: torch.Tensor,
-        track_right: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Predicts waypoints from the left and right boundaries of the track.
-
-        During test time, your model will be called with
-        model(track_left=..., track_right=...), so keep the function signature as is.
-
-        Args:
-            track_left (torch.Tensor): shape (b, n_track, 2)
-            track_right (torch.Tensor): shape (b, n_track, 2)
-
-        Returns:
-            torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
-        """
-        raise NotImplementedError
-
-
-class CNNPlanner(torch.nn.Module):
-    def __init__(
-        self,
-        n_waypoints: int = 3,
-    ):
-        super().__init__()
-
-        self.n_waypoints = n_waypoints
-
-        self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
-        self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
-
-    def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            image (torch.FloatTensor): shape (b, 3, h, w) and vals in [0, 1]
-
-        Returns:
-            torch.FloatTensor: future waypoints with shape (b, n, 2)
-        """
-        x = image
-        x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-
-        raise NotImplementedError
-
-
-MODEL_FACTORY = {
-    "mlp_planner": MLPPlanner,
-    "transformer_planner": TransformerPlanner,
-    "cnn_planner": CNNPlanner,
-}
-
-
-def load_model(
-    model_name: str,
-    with_weights: bool = False,
-    **model_kwargs,
-) -> torch.nn.Module:
+def train(
+    model_name: str = "linear_planner",
+    transform_pipeline: str = "state_only",
+    num_workers: int = 4,
+    lr: float = 1e-3,
+    batch_size: int = 128,
+    num_epoch: int = 40,
+    train_path: str = "drive_data/train",
+    val_path: str = "drive_data/val",
+    device: str = "cuda",
+):
     """
-    Called by the grader to load a pre-trained model by name
+    General training function for road planners.
+
+    Example usage:
+        for lr in [1e-2, 1e-3, 1e-4]:
+            train(
+                model_name="linear_planner",
+                transform_pipeline="state_only",
+                num_workers=4,
+                lr=lr,
+                batch_size=128,
+                num_epoch=40,
+            )
     """
-    m = MODEL_FACTORY[model_name](**model_kwargs)
+    device = torch.device(device if torch.cuda.is_available() else "cpu")
 
-    if with_weights:
-        model_path = HOMEWORK_DIR / f"{model_name}.th"
-        assert model_path.exists(), f"{model_path.name} not found"
+    # -------------------------
+    # 1) Load the dataset
+    # -------------------------
+    train_loader = load_data(
+        dataset_path=train_path,
+        transform_pipeline=transform_pipeline,
+        return_dataloader=True,
+        num_workers=num_workers,
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    val_loader = load_data(
+        dataset_path=val_path,
+        transform_pipeline=transform_pipeline,
+        return_dataloader=True,
+        num_workers=num_workers,
+        batch_size=batch_size,
+        shuffle=False,
+    )
 
-        try:
-            m.load_state_dict(torch.load(model_path, map_location="cpu"))
-        except RuntimeError as e:
-            raise AssertionError(
-                f"Failed to load {model_path.name}, make sure the default model arguments are set correctly"
-            ) from e
+    print(f"Training model '{model_name}' for {num_epoch} epochs, lr={lr}, batch_size={batch_size} ...")
 
-    # limit model sizes since they will be zipped and submitted
-    model_size_mb = calculate_model_size_mb(m)
+    # -------------------------
+    # 2) Create the model & optimizer
+    # -------------------------
+    if model_name not in MODEL_FACTORY:
+        raise ValueError(f"Unknown model_name='{model_name}'. Available: {list(MODEL_FACTORY.keys())}")
 
-    if model_size_mb > 20:
-        raise AssertionError(f"{model_name} is too large: {model_size_mb:.2f} MB")
+    # Instantiate the model
+    model = MODEL_FACTORY[model_name]()  # if you have custom kwargs, add them here
+    model.to(device)
 
-    return m
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    loss_fn = F.smooth_l1_loss  # Huber / L1 / MSE can all work
 
+    # We'll track validation performance with PlannerMetric
+    metric = PlannerMetric()
 
-def save_model(model: torch.nn.Module) -> str:
-    """
-    Use this function to save your model in train.py
-    """
-    model_name = None
+    # -------------------------
+    # 3) Training loop
+    # -------------------------
+    for epoch in range(num_epoch):
+        model.train()
+        total_train_loss = 0.0
 
-    for n, m in MODEL_FACTORY.items():
-        if type(model) is m:
-            model_name = n
+        for batch in train_loader:
+            # For "state_only" pipeline, the batch will have track_left, track_right, waypoints, waypoints_mask
+            # For "default", it will have image, track_left, track_right, etc.
 
-    if model_name is None:
-        raise ValueError(f"Model type '{str(type(model))}' not supported")
+            if "image" in batch:
+                # e.g., training CNN
+                inputs = batch["image"].to(device)
+                preds = model(inputs)
+            else:
+                # e.g., training MLP/Transformer/Linear
+                track_left = batch["track_left"].to(device)
+                track_right = batch["track_right"].to(device)
+                preds = model(track_left=track_left, track_right=track_right)
 
-    output_path = HOMEWORK_DIR / f"{model_name}.th"
-    torch.save(model.state_dict(), output_path)
+            # Supervised label
+            waypoints = batch["waypoints"].to(device)
 
-    return output_path
+            loss = loss_fn(preds, waypoints)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
+            total_train_loss += loss.item()
 
-def calculate_model_size_mb(model: torch.nn.Module) -> float:
-    """
-    Naive way to estimate model size
-    """
-    return sum(p.numel() for p in model.parameters()) * 4 / 1024 / 1024
+        avg_train_loss = total_train_loss / len(train_loader)
+
+        # -------------------------
+        # 4) Validation
+        # -------------------------
+        model.eval()
+        metric.reset()
+        total_val_loss = 0.0
+        with torch.no_grad():
+            for batch in val_loader:
+                if "image" in batch:
+                    inputs = batch["image"].to(device)
+                    preds = model(inputs)
+                else:
+                    track_left = batch["track_left"].to(device)
+                    track_right = batch["track_right"].to(device)
+                    preds = model(track_left=track_left, track_right=track_right)
+
+                waypoints = batch["waypoints"].to(device)
+                val_loss = loss_fn(preds, waypoints)
+                total_val_loss += val_loss.item()
+
+                waypoints_mask = batch["waypoints_mask"].to(device)
+                metric.add(preds, waypoints, waypoints_mask)
+
+        avg_val_loss = total_val_loss / len(val_loader)
+        results = metric.compute()  # dict with "l1_error", "longitudinal_error", "lateral_error", etc.
+
+        print(
+            f"[Epoch {epoch+1}/{num_epoch}] "
+            f"Train Loss: {avg_train_loss:.4f} | "
+            f"Val Loss: {avg_val_loss:.4f} | "
+            f"Long Err: {results['longitudinal_error']:.4f} | "
+            f"Lat Err: {results['lateral_error']:.4f}"
+        )
+
+    # -------------------------
+    # 5) Save final model
+    # -------------------------
+    save_model(model)
+    print(f"Training complete. Saved '{model_name}.th'!\n")
