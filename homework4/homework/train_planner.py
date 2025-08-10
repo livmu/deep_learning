@@ -4,14 +4,14 @@ import torch.optim as optim
 
 from homework.datasets.road_dataset import load_data
 from homework.metrics import PlannerMetric
-from homework.models import MODEL_FACTORY, save_model
+from homework.models2 import MODEL_FACTORY, save_model
 
 
 def train(
-    model_name: str = "linear_planner",
+    model_name: str = "mlp_planner",
     transform_pipeline: str = "state_only",
     num_workers: int = 4,
-    lr: float = 1e-3,
+    lr: float = 1e-4,
     batch_size: int = 128,
     num_epoch: int = 40,
     train_path: str = "drive_data/train",
