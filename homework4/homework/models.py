@@ -54,9 +54,9 @@ class MLPPlanner(nn.Module):
         """
         B = track_left.shape[0]
         x = torch.cat([track_left, track_right], dim=1)
-        x = self.net(x.view(B, -1))
         
-        return x.view(B, self.n_waypoints, 2)
+        out = self.net(x.view(B, -1))
+        return out.view(B, self.n_waypoints, 2)
 
 
 class TransformerPlanner(nn.Module):
@@ -74,6 +74,8 @@ class TransformerPlanner(nn.Module):
         self.n_track = n_track
         self.n_waypoints = n_waypoints
 
+        self.fc1 = nn.Linear(2, d_model)
+
         decoder_layer = nn.TransformerDecoderLayer(
             d_model = d_model,
             nhead = nhead,
@@ -81,11 +83,9 @@ class TransformerPlanner(nn.Module):
             batch_first = False,
         )
         
-        self.net = torch.nn.Sequential(
-            torch.nn.Embedding(n_waypoints, d_model),
-            nn.TransformerDecoder(decoder_layer, num_layers=num_layers),
-            torch.nn.Linear(d_model, n_waypoints),
-        )
+        self.query_embed = torch.nn.Embedding(n_waypoints, d_model)
+        self.transformer = nn.TransformerDecoder(decoder_layer, num_layers=num_layers
+        self.fc2 = torch.nn.Linear(d_model, n_waypoints)
 
     def forward(
         self,
@@ -106,9 +106,16 @@ class TransformerPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
-
-        x = torch.cat([track_left, track_right], dim=1)
-        return self.net(x)
+        B = track_left.shape[0]
+        
+        x = torch.cat([track_left, track_right], dim=1
+        memory = self.fc1(x).transpose(0,1)
+        
+        tgt = self.query_embed.weight.unqueeze(1).repeat(1, B, 1).contiguous()
+        out = self.transformer(tgt=tgt, memory=memory)
+        out = self.fc2(out)
+        
+        return out.transpose(0,1)
 
 
 class CNNPlanner(torch.nn.Module):
