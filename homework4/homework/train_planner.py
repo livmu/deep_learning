@@ -57,6 +57,7 @@ def train(
 
     # create loss function and optimizer
     train_metric = PlannerMetric()
+    val_metric = PlannerMetric()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
     criterion = torch.nn.MSELoss()
@@ -82,7 +83,7 @@ def train(
                 logits = model(track_left=track_left, track_right=track_right)
             
             waypoints = batch.get("waypoints").to(device)
-            #waypoints_mask = batch.get("waypoints_mask").to(device)
+            waypoints_mask = batch.get("waypoints_mask").to(device)
 
             # TODO: implement training step
             optimizer.zero_grad()
@@ -92,7 +93,7 @@ def train(
             optimizer.step()
 
             preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, waypoints)
+            train_metric.add(preds, waypoints, waypoints_mask)
 
             logger.add_scalar("train_loss", loss.item(), global_step)
             global_step += 1
@@ -111,13 +112,13 @@ def train(
                     logits = model(track_left=track_left, track_right=track_right)
                     
                 waypoints = batch.get("waypoints").to(device)
-                #waypoints_mask = batch.get("waypoints_mask").to(device)
+                waypoints_mask = batch.get("waypoints_mask").to(device)
         
                 # TODO: compute validation accuracy
                 
                 #loss = criterion(logits, waypoints)
                 preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, waypoints)
+                val_metric.add(preds, waypoints, waypoints_mask)
 
         # log average train and val accuracy to tensorboard
         train_acc = train_metric.compute()['accuracy']
