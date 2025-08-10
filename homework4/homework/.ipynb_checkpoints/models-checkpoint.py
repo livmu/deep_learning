@@ -13,6 +13,7 @@ class MLPPlanner(nn.Module):
         self,
         n_track: int = 10,
         n_waypoints: int = 3,
+        h: int = 128
     ):
         """
         Args:
@@ -24,6 +25,14 @@ class MLPPlanner(nn.Module):
         self.n_track = n_track
         self.n_waypoints = n_waypoints
 
+        self.net = nn.Sequential(
+            nn.Linear(n_track*4, h),
+            nn.ReLU(),
+            nn.Linear(h, h),
+            nn.ReLU(),
+            nn.Linear(h, n_waypoints*2)
+        )
+
     def forward(
         self,
         track_left: torch.Tensor,
@@ -43,7 +52,11 @@ class MLPPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
-        raise NotImplementedError
+        B = track_left.shape[0]
+        x = torch.cat([track_left, track_right], dim=1)
+        x = self.net(x.view(B, -1))
+        
+        return x.view(B, self.n_waypoints, 2)
 
 
 class TransformerPlanner(nn.Module):
@@ -52,13 +65,27 @@ class TransformerPlanner(nn.Module):
         n_track: int = 10,
         n_waypoints: int = 3,
         d_model: int = 64,
+        nhead: int = 8,
+        dim_feedforward: int = 256,
+        num_layers: int = 2
     ):
         super().__init__()
 
         self.n_track = n_track
         self.n_waypoints = n_waypoints
 
-        self.query_embed = nn.Embedding(n_waypoints, d_model)
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model = d_model,
+            nhead = nhead
+            dim_feedforward = dim_feedforward,
+            batch_first = False,
+        )
+        
+        self.net = torch.nn.Sequential(
+            torch.nn.Embedding(n_waypoints, d_model),
+            nn.TransformerDecoder(decoder_layer, num_layers=num_layers,
+            torch.nn.Linear(d_model, n_waypoints),
+        )
 
     def forward(
         self,
@@ -79,7 +106,9 @@ class TransformerPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
-        raise NotImplementedError
+
+        x = torch.cat([track_left, track_right], dim=1)
+        return self.net(x)
 
 
 class CNNPlanner(torch.nn.Module):

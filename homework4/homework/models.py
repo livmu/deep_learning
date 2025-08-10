@@ -65,18 +65,26 @@ class TransformerPlanner(nn.Module):
         n_track: int = 10,
         n_waypoints: int = 3,
         d_model: int = 64,
+        nhead: int = 8,
+        dim_feedforward: int = 256,
+        num_layers: int = 2
     ):
         super().__init__()
 
         self.n_track = n_track
         self.n_waypoints = n_waypoints
 
-        self.query_embed = nn.Embedding(n_waypoints, d_model)
-        #cross attentuin
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model = d_model,
+            nhead = nhead
+            dim_feedforward = dim_feedforward,
+            batch_first = False,
+        )
+        
         self.net = torch.nn.Sequential(
-            torch.nn.Embedding(128, embed_dim),
-            *[TransformerLayer(embed_dim, num_heads) for _ in range(num_layers)],
-            torch.nn.Linear(embed_dim, 128),
+            torch.nn.Embedding(n_waypoints, d_model),
+            nn.TransformerDecoder(decoder_layer, num_layers=num_layers,
+            torch.nn.Linear(d_model, n_waypoints),
         )
 
     def forward(
@@ -98,29 +106,9 @@ class TransformerPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
+
+        x = torch.cat([track_left, track_right], dim=1)
         return self.net(x)
-
-
-class TransformerLayer(torch.nn.Module):
-    def __init__(self, embed_dim, num_heads, max_len=128):
-        super().__init__()
-        self.rel_pos = torch.nn.Parameter(torch.randn(num_heads, max_len))
-        self.self_att = torch.nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(embed_dim, 4 * embed_dim), 
-            torch.nn.ReLU(), 
-            torch.nn.Linear(4 * embed_dim, embed_dim)
-        )
-        self.in_norm = torch.nn.LayerNorm(embed_dim)
-        self.mlp_norm = torch.nn.LayerNorm(embed_dim)
-
-    def forward(self, x):
-        x_norm = self.in_norm(x)
-        mask = causal_mask(x.size(1), self.rel_pos)
-        mask = mask.repeat(x.size(0), 1, 1)
-        x = x + self.self_att(x_norm, x_norm, x_norm, attn_mask=mask)[0]
-        x = x + self.mlp(self.mlp_norm(x))
-        return x
 
 
 class CNNPlanner(torch.nn.Module):

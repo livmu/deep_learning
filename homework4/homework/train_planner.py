@@ -4,7 +4,7 @@ import torch.optim as optim
 
 from homework.datasets.road_dataset import load_data
 from homework.metrics import PlannerMetric
-from homework.models2 import MODEL_FACTORY, save_model
+from homework.models import MODEL_FACTORY, save_model
 
 
 def train(
