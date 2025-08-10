@@ -74,17 +74,19 @@ class TransformerPlanner(nn.Module):
         self.n_track = n_track
         self.n_waypoints = n_waypoints
 
-        self.fc1 = nn.Linear(2, d_model)
-
+        self.query_embed = nn.Embedding(n_waypoints, d_model)
+        self.pos_embed = nn.Parameter(torch.randn(2 * n_track, d_model))
+        
         decoder_layer = nn.TransformerDecoderLayer(
             d_model = d_model,
             nhead = nhead,
             dim_feedforward = dim_feedforward,
-            batch_first = False,
+            batch_first = True,
         )
         
-        self.query_embed = torch.nn.Embedding(n_waypoints, d_model)
-        self.transformer = nn.TransformerDecoder(decoder_layer, num_layers=num_layers
+        self.transformer = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        
+        self.fc1 = nn.Linear(2, d_model)                                         
         self.fc2 = torch.nn.Linear(d_model, n_waypoints)
 
     def forward(
@@ -108,14 +110,14 @@ class TransformerPlanner(nn.Module):
         """
         B = track_left.shape[0]
         
-        x = torch.cat([track_left, track_right], dim=1
-        memory = self.fc1(x).transpose(0,1)
+        memory = torch.cat([track_left, track_right], dim=1
+        memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
         
-        tgt = self.query_embed.weight.unqueeze(1).repeat(1, B, 1).contiguous()
-        out = self.transformer(tgt=tgt, memory=memory)
-        out = self.fc2(out)
+        tgt = self.query_embed.weight.unqueeze(1).repeat(1, B, 1)
+        x = self.transformer(tgt=tgt, memory=memory)
+        x = self.fc2(x)
         
-        return out.transpose(0,1)
+        return x
 
 
 class CNNPlanner(torch.nn.Module):
