@@ -81,6 +81,7 @@ class TransformerPlanner(nn.Module):
             d_model = d_model,
             nhead = nhead,
             dim_feedforward = dim_feedforward,
+            dropout=0.1,
             batch_first = True,
         )
         
