@@ -76,7 +76,7 @@ class TransformerPlanner(nn.Module):
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model = d_model,
-            nhead = nhead
+            nhead = nhead,
             dim_feedforward = dim_feedforward,
             batch_first = False,
         )
