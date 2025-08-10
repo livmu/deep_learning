@@ -110,7 +110,7 @@ class TransformerPlanner(nn.Module):
         """
         B = track_left.shape[0]
         
-        memory = torch.cat([track_left, track_right], dim=1
+        memory = torch.cat([track_left, track_right], dim=1)
         memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
         
         tgt = self.query_embed.weight.unqueeze(1).repeat(1, B, 1)
