@@ -18,6 +18,12 @@ from .metrics import PlannerMetric
 from .models import load_model, save_model
 from homework.datasets.road_dataset import load_data
 
+def weighted_loss(pred, target):
+    diff = pred - target
+    long_diff = diff[..., 0]
+    lat_diff = diff[..., 1]
+    return (long_diff ** 2).mean() + 5.0 * (lat_diff ** 2).mean()
+
 def normalize_coordinates(coords):
     """
     coords: Tensor of shape (B, n_track, 2) representing (longitudinal, lateral)
@@ -151,8 +157,9 @@ def train(
 
             # TODO: implement training 
             optimizer.zero_grad()
-            
-            loss = criterion(logits, waypoints)
+
+            loss = weighted_loss(logits, waypoints)
+            #loss = criterion(logits, waypoints)
             #loss = criterion(logits[waypoints_mask], waypoints[waypoints_mask])
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
