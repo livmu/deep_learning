@@ -1,146 +1,203 @@
+"""
+Usage:
+    python3 -m homework.train_planner --your_args here
+"""
+
+import argparse
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
+import torch.nn as nn
+import torch.utils.tensorboard as tb
+import matplotlib.pyplot as plt
 
+from .metrics import PlannerMetric
+from .models import load_model, save_model
 from homework.datasets.road_dataset import load_data
-from homework.metrics import PlannerMetric
-from homework.models import MODEL_FACTORY, save_model
 
+def plot_waypoints(pred, target, idx=0, invert_y=False, title=None):
+    """
+    Plot predicted vs ground-truth waypoints for a single sample.
+
+    pred   : torch.Tensor of shape (B, T, 2)
+    target : torch.Tensor of shape (B, T, 2)
+    idx    : index of batch item to plot
+    invert_y : set True if you want lateral axis flipped
+    title  : optional string for plot title
+    """
+    # Select one sample and move to CPU
+    p = pred[idx].detach().cpu().numpy()
+    t = target[idx].detach().cpu().numpy()
+
+    # Optionally invert y axis (depends on your coord frame)
+    if invert_y:
+        p[:, 1] = -p[:, 1]
+        t[:, 1] = -t[:, 1]
+
+    plt.figure(figsize=(5, 5))
+    plt.plot(t[:, 0], t[:, 1], 'o-', label='Ground Truth', color='green')
+    plt.plot(p[:, 0], p[:, 1], 'x--', label='Predicted', color='red')
+    plt.scatter(t[0, 0], t[0, 1], c='blue', marker='s', label='Start')
+
+    plt.xlabel("Longitudinal (m)")
+    plt.ylabel("Lateral (m)")
+    plt.legend()
+    plt.grid(True)
+    if title:
+        plt.title(title)
+    plt.axis('equal')  # Keep aspect ratio equal for accurate geometry
+    plt.show()
 
 def train(
+    exp_dir: str = "logs",
     model_name: str = "mlp_planner",
     transform_pipeline: str = "state_only",
-    num_workers: int = 4,
+    num_epoch: int = 50,
     lr: float = 1e-4,
     batch_size: int = 128,
-    num_epoch: int = 40,
-    train_path: str = "drive_data/train",
-    val_path: str = "drive_data/val",
-    device: str = "cuda",
+    seed: int = 2024,
+    num_workers: int = 4,
+    **kwargs,
 ):
-    """
-    General training function for road planners.
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        device = torch.device("mps")
+    else:
+        print("CUDA not available, using CPU")
+        device = torch.device("cpu")
 
-    Example usage:
-        for lr in [1e-2, 1e-3, 1e-4]:
-            train(
-                model_name="linear_planner",
-                transform_pipeline="state_only",
-                num_workers=4,
-                lr=lr,
-                batch_size=128,
-                num_epoch=40,
-            )
-    """
-    device = torch.device(device if torch.cuda.is_available() else "cpu")
+    # set random seed so each run is deterministic
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
-    # -------------------------
-    # 1) Load the dataset
-    # -------------------------
-    train_loader = load_data(
-        dataset_path=train_path,
-        transform_pipeline=transform_pipeline,
-        return_dataloader=True,
+    # directory with timestamp to save tensorboard logs and model checkpoints
+    log_dir = Path(exp_dir) / f"{model_name}_{datetime.now().strftime('%m%d_%H%M%S')}"
+    logger = tb.SummaryWriter(log_dir)
+
+    # note: the grader uses default kwargs, you'll have to bake them in for the final 
+    model = load_model(model_name, **kwargs)
+    model = model.to(device)
+    model.train()
+
+    # load data
+    train_data = load_data(
+        "drive_data/train", 
+        transform_pipeline=transform_pipeline, 
+        shuffle=True, 
+        batch_size=batch_size, 
         num_workers=num_workers,
-        batch_size=batch_size,
-        shuffle=True,
     )
-    val_loader = load_data(
-        dataset_path=val_path,
-        transform_pipeline=transform_pipeline,
-        return_dataloader=True,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        shuffle=False,
-    )
+    
+    val_data = load_data("drive_data/val", shuffle=False)
+    #train_data, val_data = load_data(dataset_path='')
 
-    print(f"Training model '{model_name}' for {num_epoch} epochs, lr={lr}, batch_size={batch_size} ...")
+    # create loss function and optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
+    criterion = nn.MSELoss()
 
-    # -------------------------
-    # 2) Create the model & optimizer
-    # -------------------------
-    if model_name not in MODEL_FACTORY:
-        raise ValueError(f"Unknown model_name='{model_name}'. Available: {list(MODEL_FACTORY.keys())}")
+    global_step = 0
+    train_metric = PlannerMetric()
+    val_metric = PlannerMetric()
 
-    # Instantiate the model
-    model = MODEL_FACTORY[model_name]()  # if you have custom kwargs, add them here
-    model.to(device)
-
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = F.smooth_l1_loss  # Huber / L1 / MSE can all work
-
-    # We'll track validation performance with PlannerMetric
-    metric = PlannerMetric()
-
-    # -------------------------
-    # 3) Training loop
-    # -------------------------
+    # training loop
     for epoch in range(num_epoch):
+        # clear metrics at beginning of epoch
+        train_metric.reset()
+        val_metric.reset()
+
+        train_loss = 0.0
+        val_loss = 0.0
+        train_count = 0
+        val_count = 0
+        
         model.train()
-        total_train_loss = 0.0
 
-        for batch in train_loader:
-            # For "state_only" pipeline, the batch will have track_left, track_right, waypoints, waypoints_mask
-            # For "default", it will have image, track_left, track_right, etc.
+        for batch in train_data:
+            track_left = batch.get("track_left").to(device)
+            track_right = batch.get("track_right").to(device)
+            waypoints = batch.get("waypoints").to(device)
+            waypoints_mask = batch.get("waypoints_mask").to(device)
 
-            if "image" in batch:
-                # e.g., training CNN
-                inputs = batch["image"].to(device)
-                preds = model(inputs)
-            else:
-                # e.g., training MLP/Transformer/Linear
-                track_left = batch["track_left"].to(device)
-                track_right = batch["track_right"].to(device)
-                preds = model(track_left=track_left, track_right=track_right)
-
-            # Supervised label
-            waypoints = batch["waypoints"].to(device)
-
-            loss = loss_fn(preds, waypoints)
+            # TODO: implement training 
+            logits = model(track_left, track_right)
             optimizer.zero_grad()
+            
+            loss = criterion(logits, waypoints)
             loss.backward()
             optimizer.step()
 
-            total_train_loss += loss.item()
+            #preds = torch.argmax(logits, dim=1)
+            train_metric.add(logits, waypoints, waypoints_mask)
+            train_loss += loss.item()
+            train_count += 1
+            
+            global_step += 1
 
-        avg_train_loss = total_train_loss / len(train_loader)
+        # disable gradient computation and switch to evaluation mode
+        with torch.inference_mode():
+            model.eval()
 
-        # -------------------------
-        # 4) Validation
-        # -------------------------
-        model.eval()
-        metric.reset()
-        total_val_loss = 0.0
-        with torch.no_grad():
-            for batch in val_loader:
-                if "image" in batch:
-                    inputs = batch["image"].to(device)
-                    preds = model(inputs)
-                else:
-                    track_left = batch["track_left"].to(device)
-                    track_right = batch["track_right"].to(device)
-                    preds = model(track_left=track_left, track_right=track_right)
+            for batch in val_data:
+                track_left = batch.get("track_left").to(device)
+                track_right = batch.get("track_right").to(device)
+                waypoints = batch.get("waypoints").to(device)
+                waypoints_mask = batch.get("waypoints_mask").to(device)
+        
+                # TODO: compute validation accuracy
+                logits = model(track_left, track_right)
+                val_metric.add(logits, waypoints, waypoints_mask)
 
-                waypoints = batch["waypoints"].to(device)
-                val_loss = loss_fn(preds, waypoints)
-                total_val_loss += val_loss.item()
+                loss = criterion(logits, waypoints)
+                val_loss += loss.item()
+                val_count += 1
+                if val_count == 1:
+                    plot_waypoints(logits, waypoints, idx=0, invert_y=False, title="Pred vs GT")
+                    break
+                
 
-                waypoints_mask = batch["waypoints_mask"].to(device)
-                metric.add(preds, waypoints, waypoints_mask)
+        avg_train_loss = train_loss / train_count
+        avg_val_loss = val_loss / val_count
+        
+        train_result = train_metric.compute()
+        val_result = val_metric.compute()
 
-        avg_val_loss = total_val_loss / len(val_loader)
-        results = metric.compute()  # dict with "l1_error", "longitudinal_error", "lateral_error", etc.
+        # print on first, last, every 10th epoch
+        if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
+            print(
+                f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
+                f"train_loss: {avg_train_loss:.4f} | "
+                f"val_loss: {avg_val_loss:.4f} | "
+                f"train_err: {train_result['l1_error']:.4f} | "
+                f"val_err: {val_result['l1_error']:.4f} | "
+                f"train_long_err: {train_result['longitudinal_error']:.4f} | "
+                f"val_long_err: {val_result['longitudinal_error']:.4f} | "
+                f"train_lat_err: {train_result['lateral_error']:.4f} | "
+                f"val_lat_err: {val_result['lateral_error']:.4f} "
+            )
 
-        print(
-            f"[Epoch {epoch+1}/{num_epoch}] "
-            f"Train Loss: {avg_train_loss:.4f} | "
-            f"Val Loss: {avg_val_loss:.4f} | "
-            f"Long Err: {results['longitudinal_error']:.4f} | "
-            f"Lat Err: {results['lateral_error']:.4f}"
-        )
-
-    # -------------------------
-    # 5) Save final model
-    # -------------------------
+    # save and overwrite the model in the root directory for grading
     save_model(model)
-    print(f"Training complete. Saved '{model_name}.th'!\n")
+
+    # save a copy of model weights in the log directory
+    torch.save(model.state_dict(), log_dir / f"{model_name}.th")
+    print(f"Model saved to {log_dir / f'{model_name}.th'}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--exp_dir", type=str, default="logs")
+    parser.add_argument("--model_name", type=str, required=True)
+    parser.add_argument("--num_epoch", type=int, default=50)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--seed", type=int, default=2024)
+
+    # optional: additional model hyperparamters
+    # parser.add_argument("--num_layers", type=int, default=3)
+
+    # pass all arguments to train
+    train(**vars(parser.parse_args()))
