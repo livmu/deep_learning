@@ -180,10 +180,10 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-                valid = waypoints_mask.unsqueeze(-1)  # shape (B, T, 1)
-                loss = ((logits - waypoints)**2 * valid).sum() / valid.sum()
+                #valid = waypoints_mask.unsqueeze(-1)  # shape (B, T, 1)
+                #loss = ((logits - waypoints)**2 * valid).sum() / valid.sum()
 
-                #loss = criterion(logits, waypoints)
+                loss = criterion(logits, waypoints)
                 #loss = compute_masked_loss(criterion, logits, waypoints, waypoints_mask)
                 val_loss += loss.item()
                 val_count += 1
