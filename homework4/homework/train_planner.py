@@ -151,7 +151,7 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-                loss = criterion(logits, waypoints)
+                loss = criterion(logits, waypoints) # this is probably issue
                 val_loss += loss.item()
                 val_count += 1
                 if val_count == 1:
