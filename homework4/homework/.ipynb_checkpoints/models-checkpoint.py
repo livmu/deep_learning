@@ -92,8 +92,8 @@ class TransformerPlanner(nn.Module):
         self.fc1 = nn.Linear(2, d_model)                                         
         self.fc2 = nn.Linear(d_model, 2)
 
-        input_mean = torch.tensor(INPUT_MEAN, dtype=torch.float32)
-        input_std = torch.tensor(INPUT_STD, dtype=torch.float32)
+        input_mean = torch.tensor(INPUT_MEAN[:2], dtype=torch.float32)
+        input_std = torch.tensor(INPUT_STD[:2], dtype=torch.float32)
 
         self.register_buffer("input_mean", input_mean)
         self.register_buffer("input_std", input_std)
