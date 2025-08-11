@@ -180,7 +180,7 @@ class CNNPlanner(torch.nn.Module):
         """
         x = image
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-        x = self.fc(self.net(x)
+        x = self.fc(self.net(x))
         return x
 
 
