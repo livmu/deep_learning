@@ -64,7 +64,7 @@ class TransformerPlanner(nn.Module):
         self,
         n_track: int = 10,
         n_waypoints: int = 3,
-        d_model: int = 64,
+        d_model: int = 128,
         nhead: int = 8,
         dim_feedforward: int = 256,
         dropout: int = 0.1,

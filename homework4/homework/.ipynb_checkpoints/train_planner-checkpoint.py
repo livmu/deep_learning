@@ -139,9 +139,9 @@ def train(
             waypoints = batch.get("waypoints").to(device)
             waypoints_mask = batch.get("waypoints_mask").to(device)
 
-            #track_left, mean_left, std_left = normalize_coordinates(track_left)
-            #track_right, mean_right, std_right = normalize_coordinates(track_right)
-            #waypoints = (waypoints - mean_left) / std_left
+            track_left, mean_left, std_left = normalize_coordinates(track_left)
+            track_right, mean_right, std_right = normalize_coordinates(track_right)
+            waypoints = (waypoints - mean_left) / std_left
 
             # TODO: implement training 
             logits = model(track_left, track_right)
@@ -169,9 +169,9 @@ def train(
                 waypoints = batch.get("waypoints").to(device)
                 waypoints_mask = batch.get("waypoints_mask").to(device)
 
-                #track_left, mean_left, std_left = normalize_coordinates(track_left)
-                #track_right, mean_right, std_right = normalize_coordinates(track_right)
-                #waypoints = (waypoints - mean_left) / std_left
+                track_left, mean_left, std_left = normalize_coordinates(track_left)
+                track_right, mean_right, std_right = normalize_coordinates(track_right)
+                waypoints = (waypoints - mean_left) / std_left
         
                 # TODO: compute validation accuracy
                 logits = model(track_left, track_right)
