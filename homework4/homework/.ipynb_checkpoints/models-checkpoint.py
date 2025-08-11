@@ -88,7 +88,7 @@ class TransformerPlanner(nn.Module):
         self.transformer = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         
         self.fc1 = nn.Linear(2, d_model)                                         
-        self.fc2 = torch.nn.Linear(d_model, n_waypoints)
+        self.fc2 = torch.nn.Linear(d_model, 2)
 
     def forward(
         self,
