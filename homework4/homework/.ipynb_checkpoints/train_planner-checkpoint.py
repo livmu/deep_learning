@@ -96,7 +96,8 @@ def train(
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # weights
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
     if model_name == "mlp_planner": criterion = nn.MSELoss()
     else: criterion = F.smooth_l1_loss
