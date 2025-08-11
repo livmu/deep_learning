@@ -125,7 +125,8 @@ class TransformerPlanner(nn.Module):
 
         track_left = (track_left - self.input_mean[None, None, :]) / self.input_std[None, None, :]
         track_right = (track_right - self.input_mean[None, None, :]) / self.input_std[None, None, :]
-
+        track_left = track_left.view(B, -1)  # (b, n_track * 2)
+        track_right = track_right.view(B, -1)  # (b, n_track * 2)
         
         memory = torch.cat([track_left, track_right], dim=1)
         #memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
