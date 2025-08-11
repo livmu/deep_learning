@@ -116,7 +116,7 @@ class TransformerPlanner(nn.Module):
         track_right -= mid
         
         memory = torch.cat([track_left, track_right], dim=1)
-        memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
+        memory = self.fc1(memory) #+ self.pos_embed.unsqueeze(0)
         
         tgt = self.query_embed.weight.unsqueeze(0).expand(B, -1, -1)
         x = self.transformer(tgt=tgt, memory=memory)
