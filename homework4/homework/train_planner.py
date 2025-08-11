@@ -128,6 +128,7 @@ def train(
             
             loss = criterion(logits, waypoints)
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             #preds = torch.argmax(logits, dim=1)
@@ -151,17 +152,13 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-                #loss = criterion(logits, waypoints) # this is probably issue
-                #val_loss += loss.item()
                 val_count += 1
                 if val_count == 1:
                     plot_waypoints(logits, waypoints, idx=0, invert_y=False, title="Pred vs GT")
                     break
                 
 
-        avg_train_loss = train_loss / train_count
-        avg_val_loss = 1#val_loss / val_count
-        
+        avg_train_loss = train_loss / train_count        
         train_result = train_metric.compute()
         val_result = val_metric.compute()
 
@@ -170,9 +167,6 @@ def train(
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
                 f"train_loss: {avg_train_loss:.4f} | "
-                f"val_loss: {avg_val_loss:.4f} | "
-                f"train_err: {train_result['l1_error']:.4f} | "
-                f"val_err: {val_result['l1_error']:.4f} | "
                 f"train_long_err: {train_result['longitudinal_error']:.4f} | "
                 f"val_long_err: {val_result['longitudinal_error']:.4f} | "
                 f"train_lat_err: {train_result['lateral_error']:.4f} | "
