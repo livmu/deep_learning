@@ -152,6 +152,23 @@ class CNNPlanner(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
 
+        self.net = nn.Sequential(
+            nn.Conv2d(n_waypoints, 16, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.ReLU(),
+            nn.Conv2d(),
+            nn.ReLU(),
+            nn.Conv2d(),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1,1)),
+            nn.Flatten(),
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(),
+            nn.ReLU(),
+            nn.Linear(),
+        )
+
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
