@@ -16,6 +16,38 @@ from .metrics import PlannerMetric
 from .models import load_model, save_model
 from homework.datasets.road_dataset import load_data
 
+def plot_waypoints(pred, target, idx=0, invert_y=False, title=None):
+    """
+    Plot predicted vs ground-truth waypoints for a single sample.
+
+    pred   : torch.Tensor of shape (B, T, 2)
+    target : torch.Tensor of shape (B, T, 2)
+    idx    : index of batch item to plot
+    invert_y : set True if you want lateral axis flipped
+    title  : optional string for plot title
+    """
+    # Select one sample and move to CPU
+    p = pred[idx].detach().cpu().numpy()
+    t = target[idx].detach().cpu().numpy()
+
+    # Optionally invert y axis (depends on your coord frame)
+    if invert_y:
+        p[:, 1] = -p[:, 1]
+        t[:, 1] = -t[:, 1]
+
+    plt.figure(figsize=(5, 5))
+    plt.plot(t[:, 0], t[:, 1], 'o-', label='Ground Truth', color='green')
+    plt.plot(p[:, 0], p[:, 1], 'x--', label='Predicted', color='red')
+    plt.scatter(t[0, 0], t[0, 1], c='blue', marker='s', label='Start')
+
+    plt.xlabel("Longitudinal (m)")
+    plt.ylabel("Lateral (m)")
+    plt.legend()
+    plt.grid(True)
+    if title:
+        plt.title(title)
+    plt.axis('equal')  # Keep aspect ratio equal for accurate geometry
+    plt.show()
 
 def train(
     exp_dir: str = "logs",
@@ -121,6 +153,7 @@ def train(
                 loss = criterion(logits, waypoints)
                 val_loss += loss.item()
                 val_count += 1
+                plot_waypoints(logits, waypoints, idx=3, invert_y=False)
                 
 
         avg_train_loss = train_loss / train_count
