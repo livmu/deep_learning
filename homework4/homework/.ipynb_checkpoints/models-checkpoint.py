@@ -167,7 +167,7 @@ class CNNPlanner(torch.nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(h, h),
             nn.ReLU(),
-            nn.Linear(h, 2),
+            nn.Linear(h, n_waypoints),
             #nn.Linear(h, n_waypoints*2),
         )
 
