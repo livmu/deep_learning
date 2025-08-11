@@ -199,15 +199,14 @@ def train(
         val_result = val_metric.compute()
 
         # print on first, last, every 10th epoch
-        if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
-            print(
-                f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-                f"train_loss: {avg_train_loss:.4f} | "
-                f"train_long_err: {train_result['longitudinal_error']:.4f} | "
-                f"val_long_err: {val_result['longitudinal_error']:.4f} | "
-                f"train_lat_err: {train_result['lateral_error']:.4f} | "
-                f"val_lat_err: {val_result['lateral_error']:.4f} "
-            )
+        print(
+            f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
+            f"train_loss: {avg_train_loss:.4f} | "
+            f"train_long_err: {train_result['longitudinal_error']:.4f} | "
+            f"val_long_err: {val_result['longitudinal_error']:.4f} | "
+            f"train_lat_err: {train_result['lateral_error']:.4f} | "
+            f"val_lat_err: {val_result['lateral_error']:.4f} "
+        )
 
     # save and overwrite the model in the root directory for grading
     save_model(model)

@@ -144,7 +144,7 @@ class CNNPlanner(torch.nn.Module):
     def __init__(
         self,
         n_waypoints: int = 3,
-        h: int = 64,
+        h: int = 32,
     ):
         super().__init__()
 
@@ -154,20 +154,20 @@ class CNNPlanner(torch.nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
 
         self.net = nn.Sequential(
-            nn.Conv2d(n_waypoints, 32, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.Conv2d(n_waypoints, h, kernel_size=3, stride=1, padding=1, dilation=2),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.Conv2d(h, h*2, kernel_size=3, stride=1, padding=1, dilation=2),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.Conv2d(h*2, h*4, kernel_size=3, stride=1, padding=1, dilation=2),
             nn.ReLU(),
             nn.AdaptiveAvgPool2d((1,1)),
             nn.Flatten(),
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(128, 128),
+            nn.Linear(h*4, h*4),
             nn.ReLU(),
-            nn.Linear(128, n_waypoints*2),
+            nn.Linear(h*4, n_waypoints*2),
         )
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
