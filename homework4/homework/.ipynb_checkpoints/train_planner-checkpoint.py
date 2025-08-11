@@ -177,10 +177,10 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-                val_count += 1
-                if val_count == 1:
-                    plot_waypoints(logits, waypoints, idx=0, invert_y=False, title="Pred vs GT")
-                    break
+                #val_count += 1
+                #if val_count == 1:
+                #    plot_waypoints(logits, waypoints, idx=0, invert_y=False, title="Pred vs GT")
+                #    break
                 
 
         avg_train_loss = train_loss / train_count        
