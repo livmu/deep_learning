@@ -144,7 +144,7 @@ class CNNPlanner(torch.nn.Module):
     def __init__(
         self,
         n_waypoints: int = 3,
-        h: int = 16,
+        h: int = 32,
     ):
         super().__init__()
 
