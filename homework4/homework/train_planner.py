@@ -134,8 +134,14 @@ def train(
         model.train()
 
         for batch in train_data:
-            track_left = batch.get("track_left").to(device)
-            track_right = batch.get("track_right").to(device)
+            if model_name == "cnn_planner":
+                img = batch.get("image").to(device)
+                logits = model(img)
+            else:
+                track_left = batch.get("track_left").to(device)
+                track_right = batch.get("track_right").to(device)
+                logits = model(track_left, track_right)
+                
             waypoints = batch.get("waypoints").to(device)
             waypoints_mask = batch.get("waypoints_mask").to(device)
 
@@ -144,7 +150,6 @@ def train(
             #waypoints = (waypoints - mean_left) / std_left
 
             # TODO: implement training 
-            logits = model(track_left, track_right)
             optimizer.zero_grad()
             
             loss = criterion(logits, waypoints)
@@ -164,8 +169,14 @@ def train(
             model.eval()
 
             for batch in val_data:
-                track_left = batch.get("track_left").to(device)
-                track_right = batch.get("track_right").to(device)
+                if model_name == "cnn_planner":
+                    img = batch.get("image").to(device)
+                    logits = model(img)
+                else:
+                    track_left = batch.get("track_left").to(device)
+                    track_right = batch.get("track_right").to(device)
+                    logits = model(track_left, track_right)
+                
                 waypoints = batch.get("waypoints").to(device)
                 waypoints_mask = batch.get("waypoints_mask").to(device)
 
@@ -174,7 +185,6 @@ def train(
                 #waypoints = (waypoints - mean_left) / std_left
         
                 # TODO: compute validation accuracy
-                logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
                 #val_count += 1
