@@ -119,7 +119,6 @@ def train(
                 val_metric.add(logits, waypoints, waypoints_mask)
 
                 loss = criterion(logits, waypoints)
-                loss.backward()
                 val_loss += loss.item()
                 val_count += 1
                 
