@@ -64,7 +64,7 @@ class TransformerPlanner(nn.Module):
         n_track: int = 10,
         n_waypoints: int = 3,
         d_model: int = 96,
-        n_heads: int = 6,
+        nhead: int = 6,
         dropout: float = 0.3,
     ):
         super().__init__()
@@ -83,7 +83,7 @@ class TransformerPlanner(nn.Module):
         self.positional_encoding = nn.Embedding(n_track * 2, d_model)
 
         # Multihead attention layer
-        self.attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, dropout=dropout)
+        self.attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, dropout=dropout)
 
         # Output projection to (x, y) for each waypoint
         self.output_proj = nn.Linear(d_model, 2)
