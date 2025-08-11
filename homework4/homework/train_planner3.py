@@ -163,7 +163,7 @@ def train():
     # Data loading
     batch_size = 64
     train_data: DataLoader = load_data(
-        "drive_data/train", shuffle=True, batch_size=batch_size, num_workers=4, transform_pipeline="aug"
+        "drive_data/train", shuffle=True, batch_size=batch_size, num_workers=4, transform_pipeline="state_only"
     )
     val_data: DataLoader = load_data(
         "drive_data/val", shuffle=False, batch_size=batch_size, transform_pipeline="default"
