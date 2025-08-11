@@ -206,13 +206,16 @@ class CNNPlanner(torch.nn.Module):
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
         
         x = self.relu(self.batch1(self.conv1(x)))
-        x += self.net1(x)
+        res1 = x
+        x = self.net1(x) + res1
 
         x = self.relu(self.batch2(self.conv2(x)))
-        x += self.net2(x)
+        res2 = x
+        x = self.net2(x) + res2
 
         x = self.relu(self.batch3(self.conv3(x)))
-        x += self.net3(x)
+        res3 = x
+        x = self.net3(x) + res3
         
         x = self.pool(x)
         x = x.view(-1, self.n_waypoints, 2)
