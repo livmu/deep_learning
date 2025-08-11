@@ -92,8 +92,8 @@ class TransformerPlanner(nn.Module):
         self.fc1 = nn.Linear(2, d_model)                                         
         self.fc2 = torch.nn.Linear(d_model, 2)
 
-        self.input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
-        self.input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
+        input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
+        input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
 
     def forward(
         self,
