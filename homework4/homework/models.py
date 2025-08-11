@@ -168,7 +168,7 @@ class CNNPlanner(torch.nn.Module):
         self.pool = nn.Sequential(
             nn.Dropout(0.1),
             nn.AdaptiveAvgPool2d((1,1)),
-            nn.Linear(h*2, n_waypoints*2),
+            nn.Linear(h*4, n_waypoints*2),
         )
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
