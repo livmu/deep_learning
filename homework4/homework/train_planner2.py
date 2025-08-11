@@ -9,14 +9,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.utils.tensorboard as tb
 
-from .metrics import PlannerMetric#, DetectionMetric, ConfusionMatrix
-from .models import MLPPlanner, load_model, save_model
+from .metrics import PlannerMetric
+from .models import load_model, save_model
 from homework.datasets.road_dataset import load_data
-#from datasets.road_dataset import load_data
-#from datasets.road_transforms import load_data
-#from datasets.road_utils import load_data
 
 
 def train(
@@ -24,9 +22,10 @@ def train(
     model_name: str = "mlp_planner",
     transform_pipeline: str = "state_only",
     num_epoch: int = 50,
-    lr: float = 1e-3,
+    lr: float = 1e-4,
     batch_size: int = 128,
     seed: int = 2024,
+    num_workers: int = 4,
     **kwargs,
 ):
     if torch.cuda.is_available():
@@ -49,53 +48,53 @@ def train(
     model = load_model(model_name, **kwargs)
     model = model.to(device)
     model.train()
+
+    # load data
+    train_data = load_data(
+        "drive_data/train", 
+        transform_pipeline=transform_pipeline, 
+        shuffle=True, 
+        batch_size=batch_size, 
+        num_workers=num_workers,
+    )
     
-    # change
-    train_data = load_data("drive_data/train", transform_pipeline=transform_pipeline, shuffle=True, batch_size=batch_size, num_workers=4)
     val_data = load_data("drive_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
 
     # create loss function and optimizer
-    train_metric = PlannerMetric()
-    val_metric = PlannerMetric()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
-    criterion = torch.nn.MSELoss()
+    criterion = nn.MSELoss()
 
     global_step = 0
-    metrics = {"train_acc": [], "val_acc": []}
+    train_metric = PlannerMetric()
+    val_metric = PlannerMetric()
 
     # training loop
     for epoch in range(num_epoch):
         # clear metrics at beginning of epoch
-        for key in metrics:
-            metrics[key].clear()
-
+        train_metrics.reset()
+        val_metrics.reset()
+        
         model.train()
 
         for batch in train_data:
-            if "image" in batch:
-                img = batch.get("image").to(device)
-                logits = model(img)
-            else:
-                track_left = batch.get("track_left").to(device)
-                track_right = batch.get("track_right").to(device)
-                logits = model(track_left=track_left, track_right=track_right)
-            
+            track_left = batch.get("track_left").to(device)
+            track_right = batch.get("track_right").to(device)
             waypoints = batch.get("waypoints").to(device)
             waypoints_mask = batch.get("waypoints_mask").to(device)
 
-            # TODO: implement training step
+            # TODO: implement training 
+            logits = model(track_left, track_right)
             optimizer.zero_grad()
             
             loss = criterion(logits, waypoints)
             loss.backward()
             optimizer.step()
 
-            preds = torch.argmax(logits, dim=1)
-            train_metric.add(preds, waypoints, waypoints_mask)
+            #preds = torch.argmax(logits, dim=1)
+            train_metric.add(logits, waypoints, waypoints_mask)
 
-            logger.add_scalar("train_loss", loss.item(), global_step)
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
@@ -103,22 +102,16 @@ def train(
             model.eval()
 
             for batch in val_data:
-                if "image" in batch:
-                    img = batch.get("image").to(device)
-                    logits = model(img)
-                else:
-                    track_left = batch.get("track_left").to(device)
-                    track_right = batch.get("track_right").to(device)
-                    logits = model(track_left=track_left, track_right=track_right)
+                track_left = batch.get("track_left").to(device)
+                track_right = batch.get("track_right").to(device)
+                
                     
                 waypoints = batch.get("waypoints").to(device)
                 waypoints_mask = batch.get("waypoints_mask").to(device)
         
                 # TODO: compute validation accuracy
-                
-                #loss = criterion(logits, waypoints)
-                preds = torch.argmax(logits, dim=1)
-                val_metric.add(preds, waypoints, waypoints_mask)
+                logits = model(track_left, track_right)
+                val_metric.add(logits, waypoints, waypoints_mask)
 
         # log average train and val accuracy to tensorboard
         train_acc = train_metric.compute()['accuracy']
@@ -131,8 +124,10 @@ def train(
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
             print(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-                f"train_acc={train_acc:.4f} "
-                f"val_acc={val_acc:.4f}"
+                f"train_loss: {avg_train_loss:.4f} | "
+                f"val_loss: {avg_val_loss:.4f} | "
+                f"long_err: {results['longitudinal_error']:.4f} | "
+                f"lat_err: {results['lateral_error']:.4f}"
             )
 
     # save and overwrite the model in the root directory for grading
