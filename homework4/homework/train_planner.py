@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.tensorboard as tb
 import matplotlib.pyplot as plt
 
@@ -97,7 +98,8 @@ def train(
     # create loss function and optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     #weights = torch.tensor([0.2, 0.8, 1.0], device=device)
-    criterion = nn.MSELoss()
+    #criterion = nn.MSELoss()
+    criterion = F.smooth_l1_loss
 
     global_step = 0
     train_metric = PlannerMetric()
