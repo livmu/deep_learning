@@ -114,8 +114,8 @@ def train(
                 val_metric.add(logits, waypoints, waypoints_mask)
 
         # log average train and val accuracy to tensorboard
-        train_acc = train_metric.compute()['accuracy']
-        val_acc = val_metric.compute()['accuracy']
+        train_acc = train_metric.compute()
+        val_acc = val_metric.compute()
 
         logger.add_scalar("train_acc", train_acc, global_step)
         logger.add_scalar("val_acc", val_acc, global_step)
