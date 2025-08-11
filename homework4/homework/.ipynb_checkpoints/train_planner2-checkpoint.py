@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.tensorboard as tb
+import matplotlib.pyplot as plt
 
 from .metrics import PlannerMetric
 from .models import load_model, save_model
