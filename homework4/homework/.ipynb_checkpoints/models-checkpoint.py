@@ -75,7 +75,7 @@ class TransformerPlanner(nn.Module):
         self.n_waypoints = n_waypoints
 
         self.query_embed = nn.Embedding(n_waypoints, d_model)
-        self.pos_embed = nn.Parameter(torch.randn(2 * n_track, d_model))
+        self.pos_embed = nn.Parameter(0.01 * torch.randn(2 * n_track, d_model))
         
         decoder_layer = nn.TransformerDecoderLayer(
             d_model = d_model,
@@ -116,7 +116,7 @@ class TransformerPlanner(nn.Module):
         track_right -= mid
         
         memory = torch.cat([track_left, track_right], dim=1)
-        memory = self.fc1(memory) #+ self.pos_embed.unsqueeze(0)
+        memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
         
         tgt = self.query_embed.weight.unsqueeze(0).expand(B, -1, -1)
         x = self.transformer(tgt=tgt, memory=memory)
