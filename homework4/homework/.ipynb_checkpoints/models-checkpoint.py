@@ -60,12 +60,10 @@ class MLPPlanner(nn.Module):
 
 class TransformerPlanner(nn.Module):
     def __init__(
-        self,
-        n_track: int = 10,
-        n_waypoints: int = 3,
-        d_model: int = 96,
-        nhead: int = 6,
-        dropout: float = 0.3,
+            self,
+            n_track: int = 10,
+            n_waypoints: int = 3,
+            d_model: int = 64,
     ):
         super().__init__()
 
@@ -73,28 +71,22 @@ class TransformerPlanner(nn.Module):
         self.n_waypoints = n_waypoints
         self.d_model = d_model
 
-        # Learnable query embeddings for waypoints
+        # Learned query embeddings for each waypoints
         self.query_embed = nn.Embedding(n_waypoints, d_model)
+        # Linear encoder to project each track point to a higher dimension
+        self.transformer_encoder = nn.Linear(4, d_model)
+        # Build aa transformer decoder: a single decoder with 4 attention heads
 
-        # Linear projection to transform track inputs into d_model dimensionality
-        self.input_proj = nn.Linear(2, d_model)
+        decoder_layer = nn.TransformerDecoderLayer(d_model=d_model, nhead=4, dropout=0.2)
+        # Build the transformer decoder
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=2)
 
-        # Learnable positional encodings for the concatenated track sequence
-        self.positional_encoding = nn.Embedding(n_track * 2, d_model)
-
-        # Multihead attention layer
-        self.attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, dropout=dropout)
-
-        # Output projection to (x, y) for each waypoint
-        self.output_proj = nn.Linear(d_model, 2)
-
-        # Convert INPUT_MEAN and INPUT_STD to torch.Tensor
-        input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
-        input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
-
-        # Register mean and std as buffers
-        self.register_buffer("input_mean", input_mean)
-        self.register_buffer("input_std", input_std)
+        # Seperate output heads
+        self.out_proj_long = nn.Linear(d_model, 1)
+        self.out_proj_lat = nn.Linear(d_model, 1)
+        #
+        # # Final layer
+        # self.out_proj = nn.Linear(d_model, 2)
 
     def forward(
             self,
@@ -105,6 +97,9 @@ class TransformerPlanner(nn.Module):
         """
         Predicts waypoints from the left and right boundaries of the track.
 
+        During test time, your model will be called with
+        model(track_left=..., track_right=...), so keep the function signature as is.
+
         Args:
             track_left (torch.Tensor): shape (b, n_track, 2)
             track_right (torch.Tensor): shape (b, n_track, 2)
@@ -112,40 +107,31 @@ class TransformerPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
+        # concatenate the left and right track points
+        track_points = torch.cat((track_left, track_right), dim=2)  # shape (b, n_track, 4)
+
+        # Encode each track points into d_model features
+        track_embedded = self.transformer_encoder(track_points)  # shape (b, n_track, d_model)
+
+        # Permute track_embedded to (sequence_length, b, d_model) for transformer decoder
+        track_embedded = track_embedded.permute(1, 0, 2)  # shape (n_track, b, d_model)
+        # get the query embeddings for the waypoints
+        # shape (n_waypoints, b, d_model)
+        queries = self.query_embed.weight
         batch_size = track_left.size(0)
+        queries = queries.unsqueeze(1).expand(-1, batch_size, -1)  # shape (n_waypoints, b, d_model)
 
-        # Normalize the input
-        track_left = (track_left - self.input_mean[None, None, :]) / self.input_std[None, None, :]
-        track_right = (track_right - self.input_mean[None, None, :]) / self.input_std[None, None, :]
+        # Pass through the transformer decoder
+        decoded = self.transformer_decoder(queries, track_embedded)
 
-        # Concatenate left and right track boundaries
-        track = torch.cat([track_left, track_right], dim=1)  # Shape: (b, n_track * 2, 2)
+        # Permute the decoded outputs to (b, n_waypoints, d_model)
+        decoded = decoded.permute(1, 0, 2)  # shape (b, n_waypoints, d_model)
 
-        # Project input to d_model
-        track_encoded = self.input_proj(track)  # Shape: (b, n_track * 2, d_model)
-
-        # Add positional encoding
-        positions = torch.arange(track_encoded.size(1), device=track_encoded.device)  # Shape: (n_track * 2,)
-        positional_encodings = self.positional_encoding(positions)  # Shape: (n_track * 2, d_model)
-        positional_encodings = positional_encodings.unsqueeze(0).expand(batch_size, -1,
-                                                                        -1)  # Shape: (b, n_track * 2, d_model)
-        track_encoded += positional_encodings
-
-        # Prepare input for multihead attention (n_track * 2 as sequence length)
-        track_encoded = track_encoded.permute(1, 0, 2)  # Shape: (n_track * 2, b, d_model)
-
-        # Query embeddings for waypoints
-        query = self.query_embed.weight.unsqueeze(1).expand(-1, batch_size, -1)  # Shape: (n_waypoints, b, d_model)
-
-        # Multihead attention
-        attended_features, _ = self.attention(query, track_encoded, track_encoded)  # Shape: (n_waypoints, b, d_model)
-
-        # Project attended outputs to (x, y)
-        waypoints = self.output_proj(attended_features)  # Shape: (n_waypoints, b, 2)
-
-        # Permute back to (b, n_waypoints, 2)
-        waypoints = waypoints.permute(1, 0, 2)
-
+        # Seperate output heads for long and lat
+        pred_long = self.out_proj_long(decoded)
+        pred_lat = self.out_proj_lat(decoded)
+        # Pass through the final layer to get the waypoints
+        waypoints = torch.cat((pred_long, pred_lat), dim=2)
         return waypoints
 
 
