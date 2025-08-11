@@ -144,6 +144,7 @@ class CNNPlanner(torch.nn.Module):
     def __init__(
         self,
         n_waypoints: int = 3,
+        h: int = 64,
     ):
         super().__init__()
 
@@ -151,6 +152,23 @@ class CNNPlanner(torch.nn.Module):
 
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
+
+        self.net = nn.Sequential(
+            nn.Conv2d(n_waypoints, h, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.ReLU(),
+            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.ReLU(),
+            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1, dilation=2),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1,1)),
+            nn.Flatten(),
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(h, h),
+            nn.ReLU(),
+            nn.Linear(h, n_waypoints*2),
+        )
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -162,8 +180,8 @@ class CNNPlanner(torch.nn.Module):
         """
         x = image
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-
-        raise NotImplementedError
+        x = self.fc(self.net(x)
+        return x
 
 
 MODEL_FACTORY = {
