@@ -68,7 +68,7 @@ class TransformerPlanner(nn.Module):
         nhead: int = 8,
         dim_feedforward: int = 256,
         dropout: int = 0.1,
-        num_layers: int = 2
+        num_layers: int = 4
     ):
         super().__init__()
 
