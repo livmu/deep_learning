@@ -95,6 +95,9 @@ class TransformerPlanner(nn.Module):
         input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
         input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
 
+        self.register_buffer("input_mean", input_mean)
+        self.register_buffer("input_std", input_std)
+
     def forward(
         self,
         track_left: torch.Tensor,
