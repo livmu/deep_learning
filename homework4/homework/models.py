@@ -153,40 +153,14 @@ class CNNPlanner(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
         
-        self.relu = nn.ReLU()
-        
-        self.conv1 = nn.Conv2d(n_waypoints, h, kernel_size=3, stride=1, padding=1, dilation=2)
-        self.batch1 = nn.BatchNorm2d(h)
-
-        self.net1 = nn.Sequential(
-            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(h),
-            nn.ReLU(),
-            nn.Conv2d(h, h, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(h),
-        )
-
-        self.conv2 = nn.Conv2d(h, h*2, kernel_size=3, stride=1, padding=1, dilation=2)
-        self.batch2 = nn.BatchNorm2d(h*2)
-
-        self.net2 = nn.Sequential(
-            nn.Conv2d(h*2, h*2, kernel_size=3, stride=1, padding=1),
+        self.net = nn.Sequential(
+            nn.Conv2d(h, h*2, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(h*2),
             nn.ReLU(),
-            nn.Conv2d(h*2, h*2, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(h*2),
-        )
-
-        '''self.conv3 = nn.Conv2d(h*2, h*4, kernel_size=3, stride=1, padding=1, dilation=2)
-        self.batch3 = nn.BatchNorm2d(h*4)
-
-        self.net3 = nn.Sequential(
-            nn.Conv2d(h*4, h*4, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(h*2, h*4, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(h*4),
             nn.ReLU(),
-            nn.Conv2d(h*4, h*4, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(h*4),
-        '''
+        )
 
         self.pool = nn.Sequential(
             nn.Dropout(0.1),
@@ -205,15 +179,7 @@ class CNNPlanner(torch.nn.Module):
         x = image
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
         
-        x = self.relu(self.batch1(self.conv1(x)))
-        x += self.net1(x)
-        
-        x = self.relu(self.batch2(self.conv2(x)))
-        x += self.net2(x)
-
-        #x = self.relu(self.batch3(self.conv3(x)))
-        #x += self.net3(x)
-        
+        x = self.net(x)
         x = self.pool(x)
         x = x.view(-1, self.n_waypoints, 2)
         return x
