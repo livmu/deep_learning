@@ -75,6 +75,11 @@ def train(
         # clear metrics at beginning of epoch
         train_metric.reset()
         val_metric.reset()
+
+        train_loss = 0.0
+        val_loss = 0.0
+        train_count = 0
+        val_count = 0
         
         model.train()
 
@@ -94,7 +99,9 @@ def train(
 
             #preds = torch.argmax(logits, dim=1)
             train_metric.add(logits, waypoints, waypoints_mask)
-
+            train_loss += loss.item()
+            train_count += 1
+            
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
@@ -104,8 +111,6 @@ def train(
             for batch in val_data:
                 track_left = batch.get("track_left").to(device)
                 track_right = batch.get("track_right").to(device)
-                
-                    
                 waypoints = batch.get("waypoints").to(device)
                 waypoints_mask = batch.get("waypoints_mask").to(device)
         
@@ -113,12 +118,17 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-        # log average train and val accuracy to tensorboard
-        train_acc = train_metric.compute()
-        val_acc = val_metric.compute()
+                loss = criterion(logits, waypoints)
+                loss.backward()
+                val_loss += loss.item()
+                val_count += 1
+                
 
-        logger.add_scalar("train_acc", train_acc, global_step)
-        logger.add_scalar("val_acc", val_acc, global_step)
+        avg_train_loss = train_loss / train_count
+        avg_val_loss = val_loss / val_count
+        
+        train_result = train_metric.compute()
+        val_result = val_metric.compute()
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
@@ -126,8 +136,12 @@ def train(
                 f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
                 f"train_loss: {avg_train_loss:.4f} | "
                 f"val_loss: {avg_val_loss:.4f} | "
-                f"long_err: {results['longitudinal_error']:.4f} | "
-                f"lat_err: {results['lateral_error']:.4f}"
+                f"train_err: {train_result['l1_error']:.4f} | "
+                f"val_err: {val_result['l1_error']:.4f} | "
+                f"train_long_err: {train_result['longitudinal_error']:.4f} | "
+                f"val_long_err: {val_result['longitudinal_error']:.4f} | "
+                f"train_lat_err: {train_result['lateral_error']:.4f} | "
+                f"val_lat_err: {val_result['lateral_error']:.4f} "
             )
 
     # save and overwrite the model in the root directory for grading
