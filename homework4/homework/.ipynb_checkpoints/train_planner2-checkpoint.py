@@ -141,7 +141,7 @@ def train(
         with torch.inference_mode():
             model.eval()
 
-            for batch in val_data:
+            for batch_idx, batch in val_data:
                 track_left = batch.get("track_left").to(device)
                 track_right = batch.get("track_right").to(device)
                 waypoints = batch.get("waypoints").to(device)
@@ -154,7 +154,9 @@ def train(
                 loss = criterion(logits, waypoints)
                 val_loss += loss.item()
                 val_count += 1
-                plot_waypoints(logits, waypoints, idx=3, invert_y=False)
+                if batch_idx == 0:
+                    plot_waypoints(logits, waypoints, idx=0, invert_y=False, title="Pred vs GT")
+                    break
                 
 
         avg_train_loss = train_loss / train_count
