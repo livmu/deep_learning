@@ -18,27 +18,6 @@ from .metrics import PlannerMetric
 from .models import load_model, save_model
 from homework.datasets.road_dataset import load_data
 
-def weighted_loss(pred, target):
-    diff = pred - target
-    long_diff = diff[..., 0]
-    lat_diff = diff[..., 1]
-    return (long_diff ** 2).mean() + 5.0 * (lat_diff ** 2).mean()
-
-def normalize_coordinates(coords):
-    """
-    coords: Tensor of shape (B, n_track, 2) representing (longitudinal, lateral)
-    Returns normalized coords, mean, std for possible inverse transform if needed
-    """
-    mean = coords.mean(dim=(1, 2), keepdim=True)  # mean over track points and coordinates per batch
-    std = coords.std(dim=(1, 2), keepdim=True)    # std over track points and coordinates per batch
-    
-    # avoid division by zero
-    std = torch.where(std < 1e-6, torch.ones_like(std), std)
-    
-    normalized = (coords - mean) / std
-    return normalized, mean, std
-
-
 def plot_waypoints(pred, target, idx=0, invert_y=False, title=None):
     """
     Plot predicted vs ground-truth waypoints for a single sample.
@@ -151,15 +130,10 @@ def train(
             waypoints = batch.get("waypoints").to(device)
             waypoints_mask = batch.get("waypoints_mask").to(device)
 
-            #track_left, mean_left, std_left = normalize_coordinates(track_left)
-            #track_right, mean_right, std_right = normalize_coordinates(track_right)
-            #waypoints = (waypoints - mean_left) / std_left
-
             # TODO: implement training 
             optimizer.zero_grad()
 
-            loss = weighted_loss(logits, waypoints)
-            #loss = criterion(logits, waypoints)
+            loss = criterion(logits, waypoints)
             #loss = criterion(logits[waypoints_mask], waypoints[waypoints_mask])
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -187,10 +161,6 @@ def train(
                 
                 waypoints = batch.get("waypoints").to(device)
                 waypoints_mask = batch.get("waypoints_mask").to(device)
-
-                #track_left, mean_left, std_left = normalize_coordinates(track_left)
-                #track_right, mean_right, std_right = normalize_coordinates(track_right)
-                #waypoints = (waypoints - mean_left) / std_left
         
                 # TODO: compute validation accuracy
                 val_metric.add(logits, waypoints, waypoints_mask)
