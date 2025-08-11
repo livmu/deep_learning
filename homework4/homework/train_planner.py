@@ -152,7 +152,8 @@ def train(
             # TODO: implement training 
             optimizer.zero_grad()
             
-            loss = criterion(logits, waypoints)
+            #loss = criterion(logits, waypoints)
+            loss = criterion(logits[waypoints_mask], waypoints[waypoints_mask])
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
