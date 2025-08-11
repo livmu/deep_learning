@@ -73,8 +73,8 @@ def train(
     # training loop
     for epoch in range(num_epoch):
         # clear metrics at beginning of epoch
-        train_metrics.reset()
-        val_metrics.reset()
+        train_metric.reset()
+        val_metric.reset()
         
         model.train()
 
