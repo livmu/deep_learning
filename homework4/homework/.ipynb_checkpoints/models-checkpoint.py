@@ -58,8 +58,98 @@ class MLPPlanner(nn.Module):
         out = self.net(x.view(B, -1))
         return out.view(B, self.n_waypoints, 2)
 
-
 class TransformerPlanner(nn.Module):
+    def __init__(
+        self,
+        n_track: int = 10,
+        n_waypoints: int = 3,
+        d_model: int = 96,
+        n_heads: int = 6,
+        dropout: float = 0.3,
+    ):
+        super().__init__()
+
+        self.n_track = n_track
+        self.n_waypoints = n_waypoints
+        self.d_model = d_model
+
+        # Learnable query embeddings for waypoints
+        self.query_embed = nn.Embedding(n_waypoints, d_model)
+
+        # Linear projection to transform track inputs into d_model dimensionality
+        self.input_proj = nn.Linear(2, d_model)
+
+        # Learnable positional encodings for the concatenated track sequence
+        self.positional_encoding = nn.Embedding(n_track * 2, d_model)
+
+        # Multihead attention layer
+        self.attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, dropout=dropout)
+
+        # Output projection to (x, y) for each waypoint
+        self.output_proj = nn.Linear(d_model, 2)
+
+        # Convert INPUT_MEAN and INPUT_STD to torch.Tensor
+        input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
+        input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
+
+        # Register mean and std as buffers
+        self.register_buffer("input_mean", input_mean)
+        self.register_buffer("input_std", input_std)
+
+    def forward(
+            self,
+            track_left: torch.Tensor,
+            track_right: torch.Tensor,
+            **kwargs,
+    ) -> torch.Tensor:
+        """
+        Predicts waypoints from the left and right boundaries of the track.
+
+        Args:
+            track_left (torch.Tensor): shape (b, n_track, 2)
+            track_right (torch.Tensor): shape (b, n_track, 2)
+
+        Returns:
+            torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
+        """
+        batch_size = track_left.size(0)
+
+        # Normalize the input
+        track_left = (track_left - self.input_mean[None, None, :]) / self.input_std[None, None, :]
+        track_right = (track_right - self.input_mean[None, None, :]) / self.input_std[None, None, :]
+
+        # Concatenate left and right track boundaries
+        track = torch.cat([track_left, track_right], dim=1)  # Shape: (b, n_track * 2, 2)
+
+        # Project input to d_model
+        track_encoded = self.input_proj(track)  # Shape: (b, n_track * 2, d_model)
+
+        # Add positional encoding
+        positions = torch.arange(track_encoded.size(1), device=track_encoded.device)  # Shape: (n_track * 2,)
+        positional_encodings = self.positional_encoding(positions)  # Shape: (n_track * 2, d_model)
+        positional_encodings = positional_encodings.unsqueeze(0).expand(batch_size, -1,
+                                                                        -1)  # Shape: (b, n_track * 2, d_model)
+        track_encoded += positional_encodings
+
+        # Prepare input for multihead attention (n_track * 2 as sequence length)
+        track_encoded = track_encoded.permute(1, 0, 2)  # Shape: (n_track * 2, b, d_model)
+
+        # Query embeddings for waypoints
+        query = self.query_embed.weight.unsqueeze(1).expand(-1, batch_size, -1)  # Shape: (n_waypoints, b, d_model)
+
+        # Multihead attention
+        attended_features, _ = self.attention(query, track_encoded, track_encoded)  # Shape: (n_waypoints, b, d_model)
+
+        # Project attended outputs to (x, y)
+        waypoints = self.output_proj(attended_features)  # Shape: (n_waypoints, b, 2)
+
+        # Permute back to (b, n_waypoints, 2)
+        waypoints = waypoints.permute(1, 0, 2)
+
+        return waypoints
+
+
+class TransformerPlanner2(nn.Module):
     def __init__(
         self,
         n_track: int = 10,
