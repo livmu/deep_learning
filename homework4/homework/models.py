@@ -57,85 +57,9 @@ class MLPPlanner(nn.Module):
         
         out = self.net(x.view(B, -1))
         return out.view(B, self.n_waypoints, 2)
+        
 
 class TransformerPlanner(nn.Module):
-    def __init__(
-            self,
-            n_track: int = 10,
-            n_waypoints: int = 3,
-            d_model: int = 64,
-    ):
-        super().__init__()
-
-        self.n_track = n_track
-        self.n_waypoints = n_waypoints
-        self.d_model = d_model
-
-        # Learned query embeddings for each waypoints
-        self.query_embed = nn.Embedding(n_waypoints, d_model)
-        # Linear encoder to project each track point to a higher dimension
-        self.transformer_encoder = nn.Linear(4, d_model)
-        # Build aa transformer decoder: a single decoder with 4 attention heads
-
-        decoder_layer = nn.TransformerDecoderLayer(d_model=d_model, nhead=4, dropout=0.2)
-        # Build the transformer decoder
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=2)
-
-        # Seperate output heads
-        self.out_proj_long = nn.Linear(d_model, 1)
-        self.out_proj_lat = nn.Linear(d_model, 1)
-        #
-        # # Final layer
-        # self.out_proj = nn.Linear(d_model, 2)
-
-    def forward(
-            self,
-            track_left: torch.Tensor,
-            track_right: torch.Tensor,
-            **kwargs,
-    ) -> torch.Tensor:
-        """
-        Predicts waypoints from the left and right boundaries of the track.
-
-        During test time, your model will be called with
-        model(track_left=..., track_right=...), so keep the function signature as is.
-
-        Args:
-            track_left (torch.Tensor): shape (b, n_track, 2)
-            track_right (torch.Tensor): shape (b, n_track, 2)
-
-        Returns:
-            torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
-        """
-        # concatenate the left and right track points
-        track_points = torch.cat((track_left, track_right), dim=2)  # shape (b, n_track, 4)
-
-        # Encode each track points into d_model features
-        track_embedded = self.transformer_encoder(track_points)  # shape (b, n_track, d_model)
-
-        # Permute track_embedded to (sequence_length, b, d_model) for transformer decoder
-        track_embedded = track_embedded.permute(1, 0, 2)  # shape (n_track, b, d_model)
-        # get the query embeddings for the waypoints
-        # shape (n_waypoints, b, d_model)
-        queries = self.query_embed.weight
-        batch_size = track_left.size(0)
-        queries = queries.unsqueeze(1).expand(-1, batch_size, -1)  # shape (n_waypoints, b, d_model)
-
-        # Pass through the transformer decoder
-        decoded = self.transformer_decoder(queries, track_embedded)
-
-        # Permute the decoded outputs to (b, n_waypoints, d_model)
-        decoded = decoded.permute(1, 0, 2)  # shape (b, n_waypoints, d_model)
-
-        # Seperate output heads for long and lat
-        pred_long = self.out_proj_long(decoded)
-        pred_lat = self.out_proj_lat(decoded)
-        # Pass through the final layer to get the waypoints
-        waypoints = torch.cat((pred_long, pred_lat), dim=2)
-        return waypoints
-
-
-class TransformerPlanner2(nn.Module):
     def __init__(
         self,
         n_track: int = 10,

@@ -50,6 +50,34 @@ def plot_waypoints(pred, target, idx=0, invert_y=False, title=None):
     plt.axis('equal')  # Keep aspect ratio equal for accurate geometry
     plt.show()
 
+def compute_masked_loss(loss_fn, predictions, targets, mask):
+    """
+    Compute loss only on valid waypoints using the mask
+    
+    Args:
+        loss_fn: Loss function (e.g., MSELoss)
+        predictions: (B, n_waypoints, 2)
+        targets: (B, n_waypoints, 2)
+        mask: (B, n_waypoints) boolean mask
+    
+    Returns:
+        Masked loss value
+    """
+    # Expand mask to match prediction/target dimensions
+    mask_expanded = mask.unsqueeze(-1).expand_as(predictions)  # (B, n_waypoints, 2)
+    
+    # Apply mask to predictions and targets
+    masked_predictions = predictions[mask_expanded]
+    masked_targets = targets[mask_expanded]
+    
+    # Compute loss only on valid waypoints
+    if masked_predictions.numel() > 0:
+        return loss_fn(masked_predictions, masked_targets)
+    else:
+        # If no valid waypoints, return zero loss
+        return torch.tensor(0.0, device=predictions.device, requires_grad=True)
+
+
 def train(
     exp_dir: str = "logs",
     model_name: str = "mlp_planner",
@@ -127,7 +155,8 @@ def train(
             optimizer.zero_grad()
             
             loss = criterion(logits, waypoints)
-            loss.backward()
+            loss.backward
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             #preds = torch.argmax(logits, dim=1)
@@ -151,7 +180,11 @@ def train(
                 logits = model(track_left, track_right)
                 val_metric.add(logits, waypoints, waypoints_mask)
 
-                loss = criterion(logits, waypoints)
+                #valid = waypoints_mask.unsqueeze(-1)  # shape (B, T, 1)
+                #loss = ((logits - waypoints)**2 * valid).sum() / valid.sum()
+
+                #loss = criterion(logits, waypoints)
+                loss = compute_masked_loss(criterion, logits, waypoints, waypoints_mask)
                 val_loss += loss.item()
                 val_count += 1
                 if val_count == 1:
