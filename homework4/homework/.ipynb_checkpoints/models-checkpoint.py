@@ -110,6 +110,10 @@ class TransformerPlanner(nn.Module):
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
         B = track_left.shape[0]
+
+        mid = (track_left + track_right) / 2
+        track_left -= mid
+        track_right -= mid
         
         memory = torch.cat([track_left, track_right], dim=1)
         memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
