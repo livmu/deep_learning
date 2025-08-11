@@ -67,6 +67,7 @@ class TransformerPlanner(nn.Module):
         d_model: int = 64,
         nhead: int = 8,
         dim_feedforward: int = 256,
+        dropout: int = 0.1,
         num_layers: int = 2
     ):
         super().__init__()
@@ -82,7 +83,7 @@ class TransformerPlanner(nn.Module):
             d_model = d_model,
             nhead = nhead,
             dim_feedforward = dim_feedforward,
-            dropout=0.1,
+            dropout=dropout,
             batch_first = True,
         )
         
@@ -90,6 +91,9 @@ class TransformerPlanner(nn.Module):
         
         self.fc1 = nn.Linear(2, d_model)                                         
         self.fc2 = torch.nn.Linear(d_model, 2)
+
+        self.input_mean = torch.tensor([0.2788, 0.2657], dtype=torch.float32)
+        self.input_std = torch.tensor([0.2064, 0.1944], dtype=torch.float32)
 
     def forward(
         self,
@@ -112,14 +116,18 @@ class TransformerPlanner(nn.Module):
         """
         B = track_left.shape[0]
 
-        mid = (track_left + track_right) / 2
-        track_left -= mid
-        track_right -= mid
+        #mid = (track_left + track_right) / 2
+        #track_left -= mid
+        #track_right -= mid
+
+        track_left = (track_left - self.input_mean[None, None, :]) / self.input_std[None, None, :]
+        track_right = (track_right - self.input_mean[None, None, :]) / self.input_std[None, None, :]
+
         
         memory = torch.cat([track_left, track_right], dim=1)
         #memory = self.fc1(memory) + self.pos_embed.unsqueeze(0)
         memory = self.fc1(memory)
-        memory += self.pos_embed(torch.arange(memory.size(1), device=memory.device))
+        memory += self.pos_embed(torch.arange(memory.size(1), device=memory.device)).unsqueeze(0).expand(B, -1, -1)
         
         tgt = self.query_embed.weight.unsqueeze(0).expand(B, -1, -1)
         x = self.transformer(tgt=tgt, memory=memory)
