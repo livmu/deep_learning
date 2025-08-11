@@ -207,15 +207,15 @@ class CNNPlanner(torch.nn.Module):
         
         x = self.relu(self.batch1(self.conv1(x)))
         res1 = x
-        x = self.net1(x) + res1
+        x = self.net1(x)
 
         x = self.relu(self.batch2(self.conv2(x)))
         res2 = x
-        x = self.net2(x) + res2
+        x = self.net2(x)
 
         x = self.relu(self.batch3(self.conv3(x)))
         res3 = x
-        x = self.net3(x) + res3
+        x = self.net3(x)
         
         x = self.pool(x)
         x = x.view(-1, self.n_waypoints, 2)
