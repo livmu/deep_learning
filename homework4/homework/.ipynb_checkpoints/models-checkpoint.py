@@ -167,7 +167,7 @@ class CNNPlanner(torch.nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(h, n_waypoints*2),
+            nn.Linear(128, n_waypoints*2),
         )
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
