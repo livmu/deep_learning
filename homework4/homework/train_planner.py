@@ -150,8 +150,7 @@ def train(
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
-            preds_denorm = preds_norm * wp_std + wp_mean
-            train_metric.add(preds_denorm, wps, mask)
+            preds_denorm = logits * wp_std + wp_mean
 
             #preds = torch.argmax(logits, dim=1)
             train_metric.add(logits, waypoints, waypoints_mask)
@@ -177,6 +176,7 @@ def train(
                 waypoints_mask = batch.get("waypoints_mask").to(device)
         
                 # TODO: compute validation accuracy
+                logits = logits * wp_std + wp_mean
                 val_metric.add(logits, waypoints, waypoints_mask)
 
                 #val_count += 1
