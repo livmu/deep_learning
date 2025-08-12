@@ -95,6 +95,14 @@ def train(
     val_data = load_data("drive_data/val", shuffle=False)
     #train_data, val_data = load_data(dataset_path='')
 
+    all_wps = []
+    for batch in train_data:
+        wps = batch["waypoints"].view(-1, 2)  # flatten (B, T, 2) -> (B*T, 2)
+        all_wps.append(wps)
+    all_wps = torch.cat(all_wps, dim=0)
+    wp_mean = all_wps.mean(dim=0, keepdim=True).to(device)  # (1, 2)
+    wp_std = all_wps.std(dim=0, keepdim=True).to(device) + 1e-8
+
     # create loss function and optimizer
     # weights
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -131,6 +139,8 @@ def train(
             waypoints = batch.get("waypoints").to(device)
             waypoints_mask = batch.get("waypoints_mask").to(device)
 
+            wps_norm = (waypoints - wp_mean) / wp_std
+            
             # TODO: implement training 
             optimizer.zero_grad()
 
@@ -139,6 +149,9 @@ def train(
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+
+            preds_denorm = preds_norm * wp_std + wp_mean
+            train_metric.add(preds_denorm, wps, mask)
 
             #preds = torch.argmax(logits, dim=1)
             train_metric.add(logits, waypoints, waypoints_mask)
