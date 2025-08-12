@@ -172,6 +172,10 @@ class CNNPlanner(torch.nn.Module):
             nn.Linear(h*4, n_waypoints*2),
         )
 
+        nn.init.zeros_(self.fc.bias)
+        nn.init.xavier_uniform_(self.fc.weight)
+
+
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
