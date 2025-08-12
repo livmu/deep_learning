@@ -169,9 +169,10 @@ class CNNPlanner(torch.nn.Module):
             nn.Dropout(0.1),
             nn.AdaptiveAvgPool2d((1,1)),
             nn.Flatten(),
-            nn.Linear(h*4, n_waypoints*2),
+            #nn.Linear(h*4, n_waypoints*2),
         )
 
+        self.fc = nn.Linear(h*4, n_waypoints*2)
         nn.init.zeros_(self.fc.bias)
         nn.init.xavier_uniform_(self.fc.weight)
 
@@ -189,6 +190,7 @@ class CNNPlanner(torch.nn.Module):
         
         x = self.net(x)
         x = self.pool(x)
+        x = self.fc(x)
         x = x.view(-1, self.n_waypoints, 2)
         return x
 
