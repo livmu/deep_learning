@@ -176,7 +176,6 @@ def train(
                 waypoints_mask = batch.get("waypoints_mask").to(device)
         
                 # TODO: compute validation accuracy
-                logits = logits * wp_std + wp_mean
                 val_metric.add(logits, waypoints, waypoints_mask)
 
                 #val_count += 1
